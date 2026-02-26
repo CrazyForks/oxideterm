@@ -656,6 +656,7 @@ export const SFTPView = ({ nodeId }: { nodeId: string }) => {
   const [remotePath, setRemotePath] = useState('');
   const [remoteHome, setRemoteHome] = useState('');
   const [remoteLoading, setRemoteLoading] = useState(false);
+  const previousRemotePathRef = useRef('');
   
   const [localFiles, setLocalFiles] = useState<FileInfo[]>([]);
   const [localPath, setLocalPath] = useState('');
@@ -971,14 +972,26 @@ export const SFTPView = ({ nodeId }: { nodeId: string }) => {
         setRemoteLoading(true);
         try {
           const files = await nodeSftpListDir(nodeId, remotePath);
-          if (!cancelled) setRemoteFiles(files);
+          if (!cancelled) {
+            setRemoteFiles(files);
+            previousRemotePathRef.current = remotePath;
+          }
         } catch (err) {
           if (!cancelled) {
             const errMsg = String(err);
             console.error("SFTP List Error:", err);
             
-            // 路径不存在时 fallback 到根目录
-            if ((errMsg.includes('not found') || errMsg.includes('No such file')) && remotePath !== '/') {
+            const isPermissionDenied = errMsg.includes('Permission denied') || errMsg.includes('permission denied') || errMsg.includes('PermissionDenied');
+            const isNotFound = errMsg.includes('not found') || errMsg.includes('No such file');
+
+            if (isPermissionDenied) {
+              toastError(t('sftp.toast.permission_denied'), t('sftp.toast.permission_denied_path', { path: remotePath }));
+              // Revert to previous working path
+              const fallback = previousRemotePathRef.current || remoteHome || '/';
+              if (remotePath !== fallback) {
+                setRemotePath(fallback);
+              }
+            } else if (isNotFound && remotePath !== '/') {
               console.warn(`[SFTPView] Path "${remotePath}" not found, falling back to /`);
               setRemotePath('/');
             }
