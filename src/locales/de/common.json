@@ -29,7 +29,8 @@
     "connection_monitor": {
       "title": "Verbindungsmonitor"
     },
-    "loading": "Wird geladen..."
+    "loading": "Wird geladen...",
+    "stale_tab": "Sitzungsbindung verloren. Bitte schließen Sie diesen Tab und öffnen Sie ihn erneut über die Seitenleiste."
   },
   "tabbar": {
     "offline": "Offline",

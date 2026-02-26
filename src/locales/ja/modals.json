@@ -82,7 +82,8 @@
       "can_reach": "到達可能",
       "cancel": "キャンセル",
       "connect": "接続",
-      "connecting": "接続中..."
+      "connecting": "接続中...",
+      "connect_failed": "接続に失敗しました"
     },
     "export": {
       "title": ".oxideファイルに構成をエクスポート",

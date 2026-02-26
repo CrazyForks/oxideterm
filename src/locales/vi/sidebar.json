@@ -33,7 +33,11 @@
     },
     "tooltips": {
       "settings": "Cài đặt",
-      "ai_hint": "Trợ lý AI"
+      "ai_hint": "Trợ lý AI",
+      "switch_tree": "Chế độ cây",
+      "switch_focus": "Chế độ tập trung",
+      "auto_route": "Kết nối tự động",
+      "new_connection": "Kết nối mới"
     }
   }
 }

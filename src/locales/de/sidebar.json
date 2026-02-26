@@ -33,7 +33,11 @@
     },
     "tooltips": {
       "settings": "Einstellungen",
-      "ai_hint": "KI-Assistent"
+      "ai_hint": "KI-Assistent",
+      "switch_tree": "Baumansicht",
+      "switch_focus": "Fokusansicht",
+      "auto_route": "Auto-Route-Verbindung",
+      "new_connection": "Neue Verbindung"
     }
   }
 }

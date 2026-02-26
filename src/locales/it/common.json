@@ -29,7 +29,8 @@
     "connection_monitor": {
       "title": "Monitor Connessioni"
     },
-    "loading": "Caricamento..."
+    "loading": "Caricamento...",
+    "stale_tab": "Associazione della sessione persa. Chiudere questa scheda e riaprirla dalla barra laterale."
   },
   "tabbar": {
     "offline": "Offline",

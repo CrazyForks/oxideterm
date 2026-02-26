@@ -29,7 +29,8 @@
     "connection_monitor": {
       "title": "接続モニター"
     },
-    "loading": "読み込み中..."
+    "loading": "読み込み中...",
+    "stale_tab": "セッションバインドが失われました。このタブを閉じてサイドバーから再度開いてください。"
   },
   "tabbar": {
     "offline": "オフライン",

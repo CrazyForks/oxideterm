@@ -33,7 +33,11 @@
     },
     "tooltips": {
       "settings": "設定",
-      "ai_hint": "AI 助手"
+      "ai_hint": "AI 助手",
+      "switch_tree": "切換到樹形視圖",
+      "switch_focus": "切換到聚焦視圖",
+      "auto_route": "自動路由連線",
+      "new_connection": "新建連線"
     }
   }
 }

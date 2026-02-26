@@ -29,7 +29,8 @@
     "connection_monitor": {
       "title": "Connection Monitor"
     },
-    "loading": "Loading..."
+    "loading": "Loading...",
+    "stale_tab": "Session binding lost. Please close this tab and reopen from the sidebar."
   },
   "tabbar": {
     "offline": "Offline",

@@ -472,7 +472,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
   const recoverWebSocket = useCallback((reason: string) => {
     if (wsRecoveryInFlightRef.current) return;
-    if (wsRecoveryAttemptsRef.current >= 15) return; // Extended from 5 to 15 for weak networks
+    if (wsRecoveryAttemptsRef.current >= 15) {
+      // All recovery attempts exhausted — notify user
+      const term = terminalRef.current;
+      if (term) {
+        term.writeln(`\r\n\x1b[31m${i18n.t('terminal.ssh.connection_failed')}\x1b[0m`);
+      }
+      return;
+    }
     if (connectionStatusRef.current !== 'connected') return;
 
     wsRecoveryInFlightRef.current = true;

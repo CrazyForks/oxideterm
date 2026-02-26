@@ -82,7 +82,8 @@
       "can_reach": "Có thể đến",
       "cancel": "Hủy",
       "connect": "Kết nối",
-      "connecting": "Đang kết nối..."
+      "connecting": "Đang kết nối...",
+      "connect_failed": "Kết nối thất bại"
     },
     "export": {
       "title": "Xuất cấu hình sang file .oxide",

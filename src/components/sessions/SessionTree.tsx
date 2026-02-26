@@ -372,10 +372,11 @@ const SessionNode: React.FC<SessionNodeProps> = ({
   const isConnecting = status === 'connecting';
   const isError = status === 'error';
   const isLinkDown = status === 'link-down';
+  const isIdle = status === 'idle';
   const hasTerminals = terminalIds.length > 0;
   const hasChildren = childNodes.length > 0;
 
-  // 双击处理 - 仅在已连接状态下操作终端
+  // 双击处理 - 已连接状态操作终端，idle 状态直接连接
   const handleDoubleClick = useCallback(() => {
     if (isConnected) {
       if (terminalIds.length > 0) {
@@ -383,9 +384,11 @@ const SessionNode: React.FC<SessionNodeProps> = ({
       } else {
         onNewTerminal();
       }
+    } else if (isIdle) {
+      onConnect();
     }
-    // 其他状态不响应双击，防止误操作
-  }, [isConnected, terminalIds, onSelectTerminal, onNewTerminal]);
+    // connecting / error 状态不响应双击，防止误操作
+  }, [isConnected, isIdle, terminalIds, onSelectTerminal, onNewTerminal, onConnect]);
 
   // 节点头部
   const nodeHeader = (

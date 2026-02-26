@@ -29,7 +29,8 @@
     "connection_monitor": {
       "title": "Giám sát kết nối"
     },
-    "loading": "Đang tải..."
+    "loading": "Đang tải...",
+    "stale_tab": "Liên kết phiên đã mất. Vui lòng đóng tab này và mở lại từ thanh bên."
   },
   "tabbar": {
     "offline": "Ngoại tuyến",

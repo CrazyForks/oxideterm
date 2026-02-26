@@ -33,7 +33,11 @@
     },
     "tooltips": {
       "settings": "Settings",
-      "ai_hint": "AI Assistant"
+      "ai_hint": "AI Assistant",
+      "switch_tree": "Switch to Tree View",
+      "switch_focus": "Switch to Focus View",
+      "auto_route": "Auto-Route Connection",
+      "new_connection": "New Connection"
     }
   }
 }

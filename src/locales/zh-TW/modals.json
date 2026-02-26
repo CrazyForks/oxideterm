@@ -82,7 +82,8 @@
       "can_reach": "可連線至",
       "cancel": "取消",
       "connect": "連線",
-      "connecting": "連線中..."
+      "connecting": "連線中...",
+      "connect_failed": "連線失敗"
     },
     "export": {
       "title": "匯出設定至 .oxide 檔案",

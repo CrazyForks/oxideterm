@@ -804,7 +804,7 @@ export const Sidebar = () => {
                     size="icon"
                     className="h-6 w-6"
                     onClick={() => setViewMode(viewMode === 'focus' ? 'tree' : 'focus')}
-                    title={viewMode === 'focus' ? '切换到树形视图' : '切换到聚焦视图'}
+                    title={viewMode === 'focus' ? t('sidebar.tooltips.switch_tree') : t('sidebar.tooltips.switch_focus')}
                   >
                     {viewMode === 'focus' ? (
                       <ListChecks className="h-3 w-3" />
@@ -817,7 +817,7 @@ export const Sidebar = () => {
                     size="icon"
                     className="h-6 w-6"
                     onClick={() => toggleModal('autoRoute', true)}
-                    title="Auto-Route Connection"
+                    title={t('sidebar.tooltips.auto_route')}
                   >
                     <Network className="h-3 w-3" />
                   </Button>
@@ -826,7 +826,7 @@ export const Sidebar = () => {
                     size="icon"
                     className="h-6 w-6"
                     onClick={() => toggleModal('newConnection', true)}
-                    title="New Connection"
+                    title={t('sidebar.tooltips.new_connection')}
                   >
                     <Plus className="h-3 w-3" />
                   </Button>

@@ -34,6 +34,7 @@ import { AddJumpServerDialog } from './AddJumpServerDialog';
 import { KbiDialog } from './KbiDialog';
 import { Plus, Trash2, Key, Lock, ChevronDown, ChevronRight, Shield } from 'lucide-react';
 import { useSessionTreeStore } from '../../store/sessionTreeStore';
+import { useToast } from '../../hooks/useToast';
 
 export const NewConnectionModal = () => {
   const { t } = useTranslation();
@@ -42,6 +43,7 @@ export const NewConnectionModal = () => {
     toggleModal 
   } = useAppStore();
   const { addRootNode, connectNode, addKbiSession } = useSessionTreeStore();
+  const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   
   // KBI (2FA) specific state
@@ -59,6 +61,7 @@ export const NewConnectionModal = () => {
   const [certPath, setCertPath] = useState('');  // Certificate path
   const [passphrase, setPassphrase] = useState('');  // Key passphrase for certificate
   const [saveConnection, setSaveConnection] = useState(false);
+  const [savePassword, setSavePassword] = useState(false);
   const [group, setGroup] = useState('Ungrouped');
   const [groups, setGroups] = useState<string[]>([]);
 
@@ -266,7 +269,7 @@ export const NewConnectionModal = () => {
           port: parseInt(port) || 22,
           username,
           auth_type: saveAuthType as 'password' | 'key' | 'agent' | 'certificate',
-          password: authType === 'password' ? password : undefined,
+          password: (authType === 'password' && savePassword) ? password : undefined,
           key_path: (authType === 'key' || authType === 'default_key' || authType === 'certificate') ? keyPath : undefined,
           cert_path: authType === 'certificate' ? certPath : undefined,
         });
@@ -279,6 +282,10 @@ export const NewConnectionModal = () => {
       setPassphrase('');
     } catch (e) {
       console.error(e);
+      toastError(
+        t('modals.new_connection.connect_failed'),
+        String(e),
+      );
     } finally {
       setLoading(false);
     }
@@ -417,7 +424,7 @@ export const NewConnectionModal = () => {
                       onChange={(e) => setPassword(e.target.value)}
                     />
                     <div className="flex items-center space-x-2 pt-1">
-                       <Checkbox id="save-pass" />
+                       <Checkbox id="save-pass" checked={savePassword} onCheckedChange={(c) => setSavePassword(!!c)} />
                        <Label htmlFor="save-pass" className="font-normal">{t('modals.new_connection.save_password')}</Label>
                     </div>
                   </div>

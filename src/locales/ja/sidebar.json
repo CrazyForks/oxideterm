@@ -33,7 +33,11 @@
     },
     "tooltips": {
       "settings": "設定",
-      "ai_hint": "AIアシスタント"
+      "ai_hint": "AIアシスタント",
+      "switch_tree": "ツリービューに切替",
+      "switch_focus": "フォーカスビューに切替",
+      "auto_route": "自動ルート接続",
+      "new_connection": "新規接続"
     }
   }
 }

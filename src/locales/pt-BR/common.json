@@ -29,7 +29,8 @@
     "connection_monitor": {
       "title": "Monitor de conexão"
     },
-    "loading": "Carregando..."
+    "loading": "Carregando...",
+    "stale_tab": "Vínculo da sessão perdido. Feche esta aba e reabra pela barra lateral."
   },
   "tabbar": {
     "offline": "Offline",

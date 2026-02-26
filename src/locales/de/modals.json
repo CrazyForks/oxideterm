@@ -82,7 +82,8 @@
       "can_reach": "Kann erreichen",
       "cancel": "Abbrechen",
       "connect": "Verbinden",
-      "connecting": "Verbindung wird hergestellt..."
+      "connecting": "Verbindung wird hergestellt...",
+      "connect_failed": "Verbindung fehlgeschlagen"
     },
     "export": {
       "title": "Konfiguration in .oxide-Datei exportieren",

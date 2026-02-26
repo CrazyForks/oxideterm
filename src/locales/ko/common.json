@@ -29,7 +29,8 @@
     "connection_monitor": {
       "title": "연결 모니터"
     },
-    "loading": "로딩 중..."
+    "loading": "로딩 중...",
+    "stale_tab": "세션 바인딩이 끊어졌습니다. 이 탭을 닫고 사이드바에서 다시 열어주세요."
   },
   "tabbar": {
     "offline": "오프라인",

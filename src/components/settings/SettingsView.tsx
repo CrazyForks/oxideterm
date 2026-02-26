@@ -37,6 +37,8 @@ import { themes, getTerminalTheme, getCustomThemes, isCustomTheme } from '../../
 import { platform } from '../../lib/platform';
 import { cn } from '../../lib/utils';
 import { ThemeEditorModal } from './ThemeEditorModal';
+import { useToast } from '../../hooks/useToast';
+import { useConfirm } from '../../hooks/useConfirm';
 
 const formatThemeName = (key: string) => {
     if (isCustomTheme(key)) {
@@ -73,6 +75,8 @@ const ThemePreview = ({ themeName }: { themeName: string }) => {
 // Provider API Key Input Component
 const ProviderKeyInput = ({ providerId }: { providerId: string }) => {
     const { t } = useTranslation();
+    const { error: toastError } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
     const refreshProviderModels = useSettingsStore((s) => s.refreshProviderModels);
     const [hasKey, setHasKey] = useState(false);
     const [keyInput, setKeyInput] = useState('');
@@ -98,13 +102,13 @@ const ProviderKeyInput = ({ providerId }: { providerId: string }) => {
                             size="sm"
                             className="text-red-400 hover:text-red-300 hover:bg-red-400/10 h-8 text-xs"
                             onClick={async () => {
-                                if (confirm(t('settings_view.ai.remove_confirm'))) {
+                                if (await confirm({ title: t('settings_view.ai.remove_confirm'), variant: 'danger' })) {
                                     try {
                                         await api.deleteAiProviderApiKey(providerId);
                                         setHasKey(false);
                                         window.dispatchEvent(new CustomEvent('ai-api-key-updated'));
                                     } catch (e) {
-                                        alert(t('settings_view.ai.remove_failed', { error: e }));
+                                        toastError(t('settings_view.ai.remove_failed', { error: e }));
                                     }
                                 }
                             }}
@@ -139,7 +143,7 @@ const ProviderKeyInput = ({ providerId }: { providerId: string }) => {
                                         console.warn('[ProviderKeyInput] Auto-fetch models failed:', e)
                                     );
                                 } catch (e) {
-                                    alert(t('settings_view.ai.save_failed', { error: e }));
+                                    toastError(t('settings_view.ai.save_failed', { error: e }));
                                 } finally {
                                     setSaving(false);
                                 }
@@ -150,6 +154,7 @@ const ProviderKeyInput = ({ providerId }: { providerId: string }) => {
                     </>
                 )}
             </div>
+            {ConfirmDialog}
         </div>
     );
 };
@@ -848,6 +853,8 @@ const BackgroundImageSection = ({ terminal, updateTerminal }: BackgroundImageSec
 
 export const SettingsView = () => {
     const { t } = useTranslation();
+    const { success: toastSuccess, error: toastError } = useToast();
+    const { confirm: confirmDialog, ConfirmDialog } = useConfirm();
     const bgActive = useTabBgActive('settings');
     const [activeTab, setActiveTab] = useState('general');
 
@@ -902,7 +909,7 @@ export const SettingsView = () => {
             setGroups(updatedGroups);
         } catch (e) {
             console.error('Failed to create group:', e);
-            alert(t('settings_view.errors.create_group_failed', { error: e }));
+            toastError(t('settings_view.errors.create_group_failed', { error: e }));
         }
     };
 
@@ -913,14 +920,14 @@ export const SettingsView = () => {
             setGroups(updatedGroups);
         } catch (e) {
             console.error('Failed to delete group:', e);
-            alert(t('settings_view.errors.delete_group_failed', { error: e }));
+            toastError(t('settings_view.errors.delete_group_failed', { error: e }));
         }
     };
 
     const handleImportHost = async (alias: string) => {
         try {
             const imported = await api.importSshHost(alias);
-            alert(t('settings_view.errors.import_success', { name: imported.name }));
+            toastSuccess(t('settings_view.errors.import_success', { name: imported.name }));
             // Remove from list to show it's imported
             setSshHosts(prev => prev.filter(h => h.alias !== alias));
             // Refresh saved connections in sidebar
@@ -928,7 +935,7 @@ export const SettingsView = () => {
             await loadSavedConnections();
         } catch (e) {
             console.error('Failed to import SSH host:', e);
-            alert(t('settings_view.errors.import_failed', { error: e }));
+            toastError(t('settings_view.errors.import_failed', { error: e }));
         }
     };
 
@@ -1633,8 +1640,8 @@ export const SettingsView = () => {
                                                                 variant="ghost"
                                                                 size="sm"
                                                                 className="text-red-400 hover:text-red-300 hover:bg-red-400/10 h-7 w-7 p-0"
-                                                                onClick={() => {
-                                                                    if (confirm(t('settings_view.ai.remove_provider_confirm', { name: provider.name }))) {
+                                                                onClick={async () => {
+                                                                    if (await confirmDialog({ title: t('settings_view.ai.remove_provider_confirm', { name: provider.name }), variant: 'danger' })) {
                                                                         api.deleteAiProviderApiKey(provider.id).catch(() => { });
                                                                         removeProvider(provider.id);
                                                                     }
@@ -1682,7 +1689,7 @@ export const SettingsView = () => {
                                                                     try {
                                                                         const hasKey = await api.hasAiProviderApiKey(provider.id);
                                                                         if (!hasKey) {
-                                                                            alert(t('ai.model_selector.no_key_warning'));
+                                                                            toastError(t('ai.model_selector.no_key_warning'));
                                                                             return;
                                                                         }
                                                                     } catch { /* proceed anyway */ }
@@ -1693,7 +1700,7 @@ export const SettingsView = () => {
                                                                     console.log(`[Settings] Fetched ${models.length} models for ${provider.name}`);
                                                                 } catch (e) {
                                                                     console.error('[Settings] Failed to refresh models:', e);
-                                                                    alert(t('settings_view.ai.refresh_failed', { error: String(e) }));
+                                                                    toastError(t('settings_view.ai.refresh_failed', { error: String(e) }));
                                                                 } finally {
                                                                     setRefreshingModels(null);
                                                                 }
@@ -2142,6 +2149,7 @@ export const SettingsView = () => {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+            {ConfirmDialog}
         </div>
     );
 };

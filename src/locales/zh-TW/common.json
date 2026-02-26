@@ -29,7 +29,8 @@
     "connection_monitor": {
       "title": "連線監控"
     },
-    "loading": "載入中..."
+    "loading": "載入中...",
+    "stale_tab": "工作階段繫結已遺失。請關閉此分頁並從側邊欄重新開啟。"
   },
   "tabbar": {
     "offline": "離線",

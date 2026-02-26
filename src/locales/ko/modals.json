@@ -82,7 +82,8 @@
       "can_reach": "도달 가능",
       "cancel": "취소",
       "connect": "연결",
-      "connecting": "연결 중..."
+      "connecting": "연결 중...",
+      "connect_failed": "연결 실패"
     },
     "export": {
       "title": ".oxide 파일로 구성 내보내기",

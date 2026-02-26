@@ -29,7 +29,8 @@
     "connection_monitor": {
       "title": "Moniteur de connexions"
     },
-    "loading": "Chargement..."
+    "loading": "Chargement...",
+    "stale_tab": "Liaison de session perdue. Veuillez fermer cet onglet et le rouvrir depuis la barre latérale."
   },
   "tabbar": {
     "offline": "Hors ligne",

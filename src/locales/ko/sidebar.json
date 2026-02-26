@@ -33,7 +33,11 @@
     },
     "tooltips": {
       "settings": "설정",
-      "ai_hint": "AI 어시스턴트"
+      "ai_hint": "AI 어시스턴트",
+      "switch_tree": "트리 보기",
+      "switch_focus": "포커스 보기",
+      "auto_route": "자동 라우팅 연결",
+      "new_connection": "새 연결"
     }
   }
 }

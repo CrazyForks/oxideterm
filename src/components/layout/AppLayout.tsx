@@ -33,21 +33,24 @@ const LauncherView = lazy(() => import('../launcher/LauncherView').then(m => ({ 
 
 // Loading fallback for lazy components
 const ViewLoader = () => {
-  // Note: Can't use hooks in non-component, keep English for fallback
+  const { t } = useTranslation();
   return (
     <div className="flex items-center justify-center h-full text-theme-text-muted">
-      <div className="animate-pulse">Loading...</div>
+      <div className="animate-pulse">{t('layout.loading')}</div>
     </div>
   );
 };
 
 // Shown for legacy sftp/ide tabs that have no nodeId binding
-const StaleTabBanner = ({ type }: { type: string }) => (
-  <div className="flex flex-col items-center justify-center h-full text-theme-text-muted gap-3">
-    <div className="text-4xl opacity-20">{type === 'sftp' ? '📁' : '💻'}</div>
-    <p className="text-sm">Session binding lost. Please close this tab and reopen from the sidebar.</p>
-  </div>
-);
+const StaleTabBanner = ({ type }: { type: string }) => {
+  const { t } = useTranslation();
+  return (
+    <div className="flex flex-col items-center justify-center h-full text-theme-text-muted gap-3">
+      <div className="text-4xl opacity-20">{type === 'sftp' ? '📁' : '💻'}</div>
+      <p className="text-sm">{t('layout.stale_tab')}</p>
+    </div>
+  );
+};
 
 // Background image wrapper for non-terminal tabs
 const TabBgWrapper: React.FC<{ tabType: string; children: React.ReactNode }> = ({ tabType, children }) => {
