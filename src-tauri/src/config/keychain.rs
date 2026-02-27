@@ -19,23 +19,50 @@ pub enum KeychainError {
     NotFound(String),
 }
 
-/// Keychain manager for storing SSH credentials
+/// Keychain manager for storing SSH credentials.
+///
+/// By default, uses the cross-platform `keyring` crate.
+/// On macOS, can optionally use biometric (Touch ID) access control
+/// via the Data Protection Keychain — see [`Keychain::with_biometrics`].
 pub struct Keychain {
     service: String,
+    /// When true (macOS only), store/get/delete/exists route through
+    /// `biometric_keychain` which uses Touch ID / UserPresence.
+    #[cfg(target_os = "macos")]
+    use_biometrics: bool,
 }
 
 impl Keychain {
-    /// Create a new keychain manager
+    /// Create a new keychain manager (SSH passwords — no biometric).
     pub fn new() -> Self {
         Self {
             service: SERVICE_NAME.to_string(),
+            #[cfg(target_os = "macos")]
+            use_biometrics: false,
         }
     }
 
-    /// Create with custom service name (for testing)
+    /// Create with custom service name (no biometric).
     pub fn with_service(service: impl Into<String>) -> Self {
         Self {
             service: service.into(),
+            #[cfg(target_os = "macos")]
+            use_biometrics: false,
+        }
+    }
+
+    /// Create with biometric (Touch ID) access control.
+    ///
+    /// On macOS: secrets are stored in the Data Protection Keychain with
+    /// `kSecAccessControlUserPresence`. Reads prompt Touch ID (or login
+    /// password on Macs without Touch ID).
+    ///
+    /// On non-macOS platforms: identical to [`Self::with_service`].
+    pub fn with_biometrics(service: impl Into<String>) -> Self {
+        Self {
+            service: service.into(),
+            #[cfg(target_os = "macos")]
+            use_biometrics: true,
         }
     }
 
@@ -44,9 +71,27 @@ impl Keychain {
         format!("oxideterm-{}", Uuid::new_v4())
     }
 
-    /// Store a secret in the keychain
-    /// Returns the keychain ID used
+    /// Store a secret in the keychain.
+    ///
+    /// When biometric mode is active (macOS), tries to store with Touch ID ACL.
+    /// If biometric storage fails (e.g. missing entitlements in dev mode),
+    /// silently falls back to the cross-platform `keyring` crate.
     pub fn store(&self, id: &str, secret: &str) -> Result<(), KeychainError> {
+        #[cfg(target_os = "macos")]
+        if self.use_biometrics {
+            let account = format!("{}@{}", whoami::username(), id);
+            match super::biometric_keychain::biometric_store(&self.service, &account, secret) {
+                Ok(()) => return Ok(()),
+                Err(e) => {
+                    tracing::info!(
+                        "Biometric store failed for id={}, falling back to keyring: {}",
+                        id, e
+                    );
+                    // Fall through to keyring below
+                }
+            }
+        }
+
         tracing::info!("Keychain store: service={}, id={}", self.service, id);
         // Use explicit username to ensure stable keychain identity on macOS
         let username = whoami::username();
@@ -85,8 +130,42 @@ impl Keychain {
         Ok(id)
     }
 
-    /// Retrieve a secret from the keychain
+    /// Retrieve a secret from the keychain.
+    ///
+    /// When biometric mode is active (macOS), tries the biometric keychain first
+    /// (triggers Touch ID). If the item exists there, returns immediately.
+    /// If biometric is unavailable (e.g. dev mode without entitlements),
+    /// falls through to the `keyring` crate transparently.
     pub fn get(&self, id: &str) -> Result<String, KeychainError> {
+        #[cfg(target_os = "macos")]
+        if self.use_biometrics {
+            let account = format!("{}@{}", whoami::username(), id);
+
+            // Try biometric keychain first
+            match super::biometric_keychain::biometric_get(&self.service, &account) {
+                Ok(secret) => {
+                    // Opportunistic ACL upgrade (non-fatal)
+                    let _ = super::biometric_keychain::biometric_store(
+                        &self.service,
+                        &account,
+                        &secret,
+                    );
+                    return Ok(secret);
+                }
+                Err(KeychainError::NotFound(_)) => {
+                    // Not in biometric keychain — fall through to keyring
+                }
+                Err(e) => {
+                    // Biometric failed (entitlements, auth error, etc.) — try keyring
+                    tracing::debug!(
+                        "Biometric get failed for id={}, trying keyring: {}",
+                        id, e
+                    );
+                }
+            }
+            // Fall through to keyring path below
+        }
+
         tracing::info!("Keychain get: service={}, id={}", self.service, id);
         // Use same username-prefixed account as store()
         let username = whoami::username();
@@ -107,8 +186,22 @@ impl Keychain {
         }
     }
 
-    /// Delete a secret from the keychain
+    /// Delete a secret from the keychain.
+    ///
+    /// When biometric mode is active (macOS), attempts to delete from both the
+    /// biometric keychain and the `keyring` location. Errors are silenced.
     pub fn delete(&self, id: &str) -> Result<(), KeychainError> {
+        #[cfg(target_os = "macos")]
+        if self.use_biometrics {
+            let account = format!("{}@{}", whoami::username(), id);
+            // Best-effort delete from biometric keychain (may fail if no entitlements)
+            let _ = super::biometric_keychain::biometric_delete(&self.service, &account);
+            // Also delete from keyring (where items actually live in dev mode)
+            let entry = Entry::new(&self.service, &account)?;
+            let _ = entry.delete_credential();
+            return Ok(());
+        }
+
         // Use same username-prefixed account
         let username = whoami::username();
         let entry = Entry::new(&self.service, &format!("{}@{}", username, id))?;
@@ -119,8 +212,29 @@ impl Keychain {
         }
     }
 
-    /// Check if a secret exists
+    /// Check if a secret exists.
+    ///
+    /// When biometric mode is active (macOS), checks biometric keychain first
+    /// (without auth prompt), then falls back to `keyring`.
     pub fn exists(&self, id: &str) -> Result<bool, KeychainError> {
+        #[cfg(target_os = "macos")]
+        if self.use_biometrics {
+            let account = format!("{}@{}", whoami::username(), id);
+            // Check biometric keychain (no auth prompt)
+            match super::biometric_keychain::biometric_exists(&self.service, &account) {
+                Ok(true) => return Ok(true),
+                Ok(false) => {}
+                Err(_) => {} // biometric unavailable, check keyring
+            }
+            // Check keyring (where items live when biometric is unavailable)
+            let entry = Entry::new(&self.service, &account)?;
+            return match entry.get_password() {
+                Ok(_) => Ok(true),
+                Err(keyring::Error::NoEntry) => Ok(false),
+                Err(e) => Err(KeychainError::Keyring(e)),
+            };
+        }
+
         // Use same username-prefixed account as store()/get()/delete()
         let username = whoami::username();
         let entry = Entry::new(&self.service, &format!("{}@{}", username, id))?;

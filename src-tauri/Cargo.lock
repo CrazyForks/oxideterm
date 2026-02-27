@@ -3274,7 +3274,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm"
-version = "0.15.0"
+version = "0.15.1"
 dependencies = [
  "argon2",
  "async-trait",
@@ -3283,6 +3283,8 @@ dependencies = [
  "chacha20poly1305",
  "chardetng",
  "chrono",
+ "core-foundation 0.9.4",
+ "core-foundation-sys",
  "dashmap",
  "dirs",
  "encoding_rs",
@@ -3308,6 +3310,8 @@ dependencies = [
  "rmp-serde",
  "russh",
  "russh-sftp",
+ "security-framework 2.11.1",
+ "security-framework-sys",
  "serde",
  "serde_json",
  "sha2",
@@ -4642,6 +4646,7 @@ dependencies = [
  "core-foundation 0.9.4",
  "core-foundation-sys",
  "libc",
+ "num-bigint",
  "security-framework-sys",
 ]
 

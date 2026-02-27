@@ -1,6 +1,6 @@
 [package]
 name = "oxideterm"
-version = "0.15.0"
+version = "0.15.1"
 description = "A modern SSH terminal client built with Rust and Tauri"
 authors = ["OxideTerm Team"]
 license = "LicenseRef-PolyForm-Noncommercial-1.0.0"
@@ -126,6 +126,13 @@ vte = "0.14"
 regex = "1.10"
 strip-ansi-escapes = "0.2"
 flate2 = "1.1.9"
+
+# macOS Biometric Keychain (Touch ID for API keys)
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = { version = "2", features = ["OSX_10_13"] }
+security-framework-sys = { version = "2", features = ["OSX_10_13"] }
+core-foundation = "0.9"
+core-foundation-sys = "0.8"
 
 # Unix process group management (for PTY cleanup)
 [target.'cfg(unix)'.dependencies]

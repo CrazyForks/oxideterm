@@ -32,7 +32,7 @@ impl ConfigState {
             storage,
             config: RwLock::new(config),
             keychain: Keychain::new(),
-            ai_keychain: Keychain::with_service(AI_KEYCHAIN_SERVICE),
+            ai_keychain: Keychain::with_biometrics(AI_KEYCHAIN_SERVICE),
         })
     }
 
@@ -1062,9 +1062,10 @@ pub async fn has_ai_provider_api_key(
     state: State<'_, Arc<ConfigState>>,
     provider_id: String,
 ) -> Result<bool, String> {
-    // Check keychain
-    match state.ai_keychain.get(&provider_id) {
-        Ok(_) => return Ok(true),
+    // Check keychain (uses biometric_exists on macOS — no Touch ID prompt)
+    match state.ai_keychain.exists(&provider_id) {
+        Ok(true) => return Ok(true),
+        Ok(false) => {}
         Err(_) => {}
     }
 
@@ -1135,7 +1136,7 @@ pub async fn list_ai_provider_keys(
         }
     }
 
-    // Check known provider IDs in keychain
+    // Check known provider IDs in keychain (uses exists() to avoid Touch ID prompts)
     // Since keychain doesn't support enumeration, we probe known provider IDs
     let known_ids = [
         "builtin-openai",
@@ -1144,7 +1145,7 @@ pub async fn list_ai_provider_keys(
         "builtin-ollama",
     ];
     for id in &known_ids {
-        if state.ai_keychain.get(id).is_ok() {
+        if state.ai_keychain.exists(id).unwrap_or(false) {
             providers.insert(id.to_string());
         }
     }
