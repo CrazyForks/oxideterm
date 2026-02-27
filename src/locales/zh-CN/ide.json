@@ -45,6 +45,7 @@
     "replace_all": "替换全部",
     "unsaved_changes": "未保存的更改",
     "unsaved_changes_desc": "是否保存对 {{fileName}} 的更改？",
+    "unsaved_changes_folder": "您有未保存的更改，切换文件夹将丢弃这些更改。是否继续？",
     "cancel": "取消",
     "discard": "不保存",
     "save": "保存",
@@ -121,6 +122,9 @@
       "fileAlreadyOpen": "文件已打开",
       "noSession": "无 SFTP 会话",
       "unsavedChanges": "有未保存的更改"
+    },
+    "tree": {
+      "truncated": "还有 {{count}} 个项未显示"
     }
   }
 }

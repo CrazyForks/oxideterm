@@ -12,7 +12,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 use super::{
     bridge, limits, wsl, wslg, GraphicsSessionMode, WslDistro, WslGraphicsHandle,
@@ -319,6 +319,7 @@ fn validate_argv(argv: &[String]) -> Result<(), String> {
 /// 7. Returns session info
 #[tauri::command]
 pub async fn wsl_graphics_start_app(
+    app: AppHandle,
     state: State<'_, Arc<WslGraphicsState>>,
     distro: String,
     argv: Vec<String>,
@@ -442,8 +443,9 @@ pub async fn wsl_graphics_start_app(
     let state_clone = state.inner().clone();
     let sid = session_id.clone();
     let distro_clone = distro.clone();
+    let app_clone = app.clone();
     tokio::spawn(async move {
-        watch_app_exit(sid, distro_clone, state_clone, stop_rx).await;
+        watch_app_exit(sid, distro_clone, state_clone, stop_rx, app_clone).await;
     });
 
     Ok(session)
@@ -463,6 +465,7 @@ async fn watch_app_exit(
     distro: String,
     state: Arc<WslGraphicsState>,
     mut stop_rx: tokio::sync::oneshot::Receiver<()>,
+    app_handle: AppHandle,
 ) {
     // Take ownership of app_child from the session handle so we can
     // call `.wait()` without holding the write lock.
@@ -524,7 +527,8 @@ async fn watch_app_exit(
                 drop(sessions); // Release lock before potentially slow WSL cleanup
                 wsl::cleanup_wsl_session(&distro).await;
             }
-            // TODO: emit Tauri event to frontend for UI update
+            // Notify frontend that the session has been torn down
+            let _ = app_handle.emit("wsl_graphics_stopped", &session_id);
         }
         _ = &mut stop_rx => {
             // ── Stop signal from wsl_graphics_stop ──

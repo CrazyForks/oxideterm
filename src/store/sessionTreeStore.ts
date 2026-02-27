@@ -11,6 +11,7 @@
 
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
+import { listen } from '@tauri-apps/api/event';
 import { api, nodeSftpInit } from '../lib/api';
 import { useReconnectOrchestratorStore } from './reconnectOrchestratorStore';
 import { topologyResolver } from '../lib/topologyResolver';
@@ -2164,8 +2165,24 @@ export function setupTreeStoreSubscriptions() {
     }
   });
   
-  // TODO: 添加 Tauri 事件监听器
-  // listen('ssh-connection-state-changed', (event) => { ... })
+  // 监听 connection_status_changed 事件，实时同步后端状态变更
+  // 与 useConnectionEvents 中的 appStore.refreshConnections() 并行，不冲突
+  let unlistenStatus: (() => void) | null = null;
+  listen<unknown>('connection_status_changed', () => {
+    // 后端连接状态发生变化时，立即同步 sessionTree
+    store.syncFromBackend().then(report => {
+      if (report.driftCount > 0) {
+        console.info(`[SessionTree] Event-driven sync fixed ${report.driftCount} drift(s)`);
+      }
+    });
+  }).then(fn => {
+    unlistenStatus = fn;
+  });
+
+  // 存储 unlisten 函数以便 cleanup 时调用
+  (setupTreeStoreSubscriptions as any)._unlisten = () => {
+    unlistenStatus?.();
+  };
 }
 
 /**
@@ -2176,6 +2193,8 @@ export function setupTreeStoreSubscriptions() {
 export function cleanupTreeStoreSubscriptions() {
   const store = useSessionTreeStore.getState();
   store.stopPeriodicSync();
+  // 清理 Tauri 事件监听器
+  (setupTreeStoreSubscriptions as any)._unlisten?.();
 }
 
 export default useSessionTreeStore;

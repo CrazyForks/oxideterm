@@ -45,6 +45,7 @@
     "replace_all": "全部取代",
     "unsaved_changes": "未儲存的變更",
     "unsaved_changes_desc": "是否儲存 {{fileName}} 的變更？",
+    "unsaved_changes_folder": "您有未儲存的變更，切換資料夾將捨棄這些變更。是否繼續？",
     "cancel": "取消",
     "discard": "不儲存",
     "save": "儲存",
@@ -120,7 +121,8 @@
       "alreadyExists": "已存在",
       "fileAlreadyOpen": "檔案已開啟",
       "noSession": "沒有 SFTP 工作階段",
-      "unsavedChanges": "有未儲存的變更"
-    }
+      "unsavedChanges": "有未儲存的變更"    },
+    "tree": {
+      "truncated": "還有 {{count}} 個項目未顯示"    }
   }
 }

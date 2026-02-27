@@ -45,6 +45,7 @@
     "replace_all": "Replace all",
     "unsaved_changes": "Unsaved Changes",
     "unsaved_changes_desc": "Do you want to save the changes to {{fileName}}?",
+    "unsaved_changes_folder": "You have unsaved changes. Switching folders will discard them. Continue?",
     "cancel": "Cancel",
     "discard": "Don't Save",
     "save": "Save",
@@ -121,6 +122,9 @@
       "fileAlreadyOpen": "File is already open",
       "noSession": "No SFTP session",
       "unsavedChanges": "Has unsaved changes"
+    },
+    "tree": {
+      "truncated": "+{{count}} more items not shown"
     }
   }
 }

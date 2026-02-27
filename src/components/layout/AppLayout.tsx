@@ -18,6 +18,7 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useLocalTerminalStore } from '../../store/localTerminalStore';
 import { useTabBgActive } from '../../hooks/useTabBackground';
+import { platform } from '../../lib/platform';
 
 // Lazy load non-critical views (only loaded when user opens SFTP/Forwards tab)
 const SettingsView = lazy(() => import('../settings/SettingsView').then(m => ({ default: m.SettingsView })));
@@ -91,7 +92,7 @@ const EmptyState = () => {
   const { t } = useTranslation();
   const { toggleModal, createTab } = useAppStore();
   const createLocalTerminal = useLocalTerminalStore((s) => s.createTerminal);
-  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const isMac = platform.isMac;
 
   const handleNewLocalTerminal = async () => {
     try {
@@ -172,7 +173,7 @@ export const AppLayout = () => {
     return () => cancelAnimationFrame(raf);
   }, [zenMode]);
 
-  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const isMac = platform.isMac;
 
   // Handlers for split pane interactions
   const handlePaneFocus = useCallback((tabId: string, paneId: string) => {

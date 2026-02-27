@@ -45,6 +45,7 @@
     "replace_all": "すべて置換",
     "unsaved_changes": "未保存の変更",
     "unsaved_changes_desc": "{{fileName}} への変更を保存しますか？",
+    "unsaved_changes_folder": "未保存の変更があります。フォルダーを切り替えると破棄されます。続行しますか？",
     "cancel": "キャンセル",
     "discard": "保存しない",
     "save": "保存",
@@ -120,7 +121,8 @@
       "alreadyExists": "既に存在します",
       "fileAlreadyOpen": "ファイルは既に開かれています",
       "noSession": "SFTPセッションがありません",
-      "unsavedChanges": "未保存の変更があります"
-    }
+      "unsavedChanges": "未保存の変更があります"    },
+    "tree": {
+      "truncated": "他 {{count}} 件は表示されていません"    }
   }
 }

@@ -31,6 +31,7 @@ import { normalizePath, getParentPath } from '../../lib/pathUtils';
 import { useSessionTreeStore } from '../../store/sessionTreeStore';
 import { findPaneBySessionId, writeToTerminal } from '../../lib/terminalRegistry';
 import { useToast } from '../../hooks/useToast';
+import { useConfirm } from '../../hooks/useConfirm';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Git 状态 Context（避免在每个节点中调用 hook）
@@ -181,7 +182,7 @@ function TreeNode({
       if (sorted.length > MAX_DIR_ITEMS) {
         const truncated = sorted.slice(0, MAX_DIR_ITEMS);
         setChildren(truncated);
-        setError(`+${sorted.length - MAX_DIR_ITEMS} more items not shown`);
+        setError(t('ide.tree.truncated', { count: sorted.length - MAX_DIR_ITEMS }));
       } else {
         setChildren(sorted);
       }
@@ -402,6 +403,7 @@ function TreeNode({
 export function IdeTree() {
   const { t } = useTranslation();
   const { toast } = useToast();
+  const { confirm, ConfirmDialog } = useConfirm();
   const project = useIdeProject();
   
   // 精细化 selector：只订阅需要的状态
@@ -515,13 +517,18 @@ export function IdeTree() {
   }, [loadRoot, refreshGit]);
   
   // 打开文件夹选择对话框
-  const handleOpenFolderDialog = useCallback(() => {
+  const handleOpenFolderDialog = useCallback(async () => {
     if (hasDirtyFiles) {
-      // TODO: 显示提示保存文件
-      return;
+      const proceed = await confirm({
+        title: t('ide.unsaved_changes', 'Unsaved Changes'),
+        description: t('ide.unsaved_changes_folder', 'You have unsaved changes. Switching folders will discard them. Continue?'),
+        confirmLabel: t('ide.discard', "Don't Save"),
+        variant: 'danger',
+      });
+      if (!proceed) return;
     }
     setFolderDialogOpen(true);
-  }, [hasDirtyFiles]);
+  }, [hasDirtyFiles, confirm, t]);
   
   // 处理文件夹选择
   const handleFolderSelect = useCallback(async (path: string) => {
@@ -891,6 +898,9 @@ export function IdeTree() {
             onClose={closeContextMenu}
           />
         )}
+        
+        {/* 切换目录未保存确认 */}
+        {ConfirmDialog}
         
         {/* 删除确认对话框 */}
         {deleteConfirm && (

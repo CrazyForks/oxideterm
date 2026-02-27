@@ -45,6 +45,7 @@
     "replace_all": "Thay thế tất cả",
     "unsaved_changes": "Thay đổi chưa lưu",
     "unsaved_changes_desc": "Bạn có muốn lưu các thay đổi trong {{fileName}} không?",
+    "unsaved_changes_folder": "Bạn có thay đổi chưa lưu. Chuyển thư mục sẽ mất các thay đổi này. Tiếp tục?",
     "cancel": "Hủy",
     "discard": "Không lưu",
     "save": "Lưu",
@@ -121,6 +122,9 @@
       "fileAlreadyOpen": "Tệp đã được mở",
       "noSession": "Không có phiên SFTP",
       "unsavedChanges": "Có thay đổi chưa lưu"
+    },
+    "tree": {
+      "truncated": "+{{count}} mục khác không được hiển thị"
     }
   }
 }

@@ -542,6 +542,7 @@ export interface SaveConnectionRequest {
   cert_path?: string;
   color?: string;
   tags?: string[];
+  proxy_chain?: ProxyHopInfo[];
 }
 
 // Terminal Config

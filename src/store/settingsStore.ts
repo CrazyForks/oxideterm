@@ -235,7 +235,8 @@ export interface ExperimentalSettings {
 // ============================================================================
 
 const isWindows = typeof navigator !== 'undefined'
-  && navigator.platform.toLowerCase().includes('win');
+  && (navigator as any).userAgentData?.platform?.toLowerCase() === 'windows'
+  || (typeof navigator !== 'undefined' && (navigator.platform ?? '').toLowerCase().includes('win'));
 
 // ============================================================================
 // Default Values

@@ -45,6 +45,7 @@
     "replace_all": "Substituir tudo",
     "unsaved_changes": "Alterações não salvas",
     "unsaved_changes_desc": "Deseja salvar as alterações em {{fileName}}?",
+    "unsaved_changes_folder": "Você tem alterações não salvas. Trocar de pasta irá descartá-las. Continuar?",
     "cancel": "Cancelar",
     "discard": "Não salvar",
     "save": "Salvar",
@@ -121,6 +122,9 @@
       "fileAlreadyOpen": "O arquivo já está aberto",
       "noSession": "Sem sessão SFTP",
       "unsavedChanges": "Tem alterações não salvas"
+    },
+    "tree": {
+      "truncated": "+{{count}} itens adicionais não exibidos"
     }
   }
 }

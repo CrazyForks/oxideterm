@@ -45,6 +45,7 @@
     "replace_all": "Alle ersetzen",
     "unsaved_changes": "Nicht gespeicherte Änderungen",
     "unsaved_changes_desc": "Möchten Sie die Änderungen an {{fileName}} speichern?",
+    "unsaved_changes_folder": "Sie haben nicht gespeicherte Änderungen. Beim Ordnerwechsel gehen diese verloren. Fortfahren?",
     "cancel": "Abbrechen",
     "discard": "Nicht speichern",
     "save": "Speichern",
@@ -121,6 +122,9 @@
       "fileAlreadyOpen": "Datei ist bereits geöffnet",
       "noSession": "Keine SFTP-Sitzung",
       "unsavedChanges": "Hat nicht gespeicherte Änderungen"
+    },
+    "tree": {
+      "truncated": "+{{count}} weitere Elemente nicht angezeigt"
     }
   }
 }

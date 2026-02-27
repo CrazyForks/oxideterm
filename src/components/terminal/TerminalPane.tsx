@@ -46,7 +46,7 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
   return (
     <div
       className={cn(
-        'relative h-full w-full overflow-hidden rounded-sm transition-all duration-150',
+        'group relative h-full w-full overflow-hidden rounded-sm transition-all duration-150',
         // Oxide Orange focus border
         isActive
           ? 'ring-2 ring-[#FF6B35] ring-opacity-80'

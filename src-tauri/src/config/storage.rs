@@ -100,6 +100,15 @@ impl ConfigStorage {
                             });
                         }
                         // TODO: Run migrations if config.version < CONFIG_VERSION
+                        // Currently CONFIG_VERSION == 1, so no migrations needed yet.
+                        // When CONFIG_VERSION is bumped, add migration steps here:
+                        //
+                        // let mut config = config;
+                        // if config.version < 2 {
+                        //     // migrate v1 → v2: e.g. rename fields, add defaults
+                        //     config.version = 2;
+                        // }
+                        // if config.version < 3 { ... }
                         Ok(config)
                     }
                     Err(e) => {

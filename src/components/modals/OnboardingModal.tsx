@@ -6,6 +6,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { api } from '../../lib/api';
 import { useAppStore } from '../../store/appStore';
 import { useLocalTerminalStore } from '../../store/localTerminalStore';
+import { platform } from '../../lib/platform';
 import {
   Download,
   Check,
@@ -89,7 +90,7 @@ export const OnboardingModal = () => {
 
   if (onboardingCompleted) return null;
 
-  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const isMac = platform.isMac;
 
   // Derive import card label
   const importLabel =

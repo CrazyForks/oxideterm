@@ -45,6 +45,7 @@
     "replace_all": "Tout remplacer",
     "unsaved_changes": "Modifications non enregistrées",
     "unsaved_changes_desc": "Voulez-vous enregistrer les modifications de {{fileName}} ?",
+    "unsaved_changes_folder": "Vous avez des modifications non enregistrées. Changer de dossier les supprimera. Continuer ?",
     "cancel": "Annuler",
     "discard": "Ne pas enregistrer",
     "save": "Enregistrer",
@@ -120,7 +121,8 @@
       "alreadyExists": "Existe déjà",
       "fileAlreadyOpen": "Le fichier est déjà ouvert",
       "noSession": "Pas de session SFTP",
-      "unsavedChanges": "A des modifications non enregistrées"
-    }
+      "unsavedChanges": "A des modifications non enregistrées"    },
+    "tree": {
+      "truncated": "+{{count}} éléments supplémentaires non affichés"    }
   }
 }

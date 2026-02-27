@@ -36,6 +36,7 @@ import type { FileInfo, FilePreview, PreviewType, FileMetadata, ArchiveInfo, Che
 // Preview imports
 import { readFile, stat, writeTextFile, copyFile } from '@tauri-apps/plugin-fs';
 import { invoke, convertFileSrc } from '@tauri-apps/api/core';
+import { platform } from '../../lib/platform';
 
 // File extension categorization
 const TEXT_EXTENSIONS = new Set(['txt', 'log', 'ini', 'conf', 'cfg', 'env']);
@@ -698,7 +699,7 @@ export const LocalFileManager: React.FC<LocalFileManagerProps> = ({ className })
         return;
       }
       
-      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const isMac = platform.isMac;
       const modifier = isMac ? e.metaKey : e.ctrlKey;
       
       if (modifier && e.key === 'c') {

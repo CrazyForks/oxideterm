@@ -45,6 +45,7 @@
     "replace_all": "Reemplazar todo",
     "unsaved_changes": "Cambios sin guardar",
     "unsaved_changes_desc": "¿Desea guardar los cambios en {{fileName}}?",
+    "unsaved_changes_folder": "Tiene cambios sin guardar. Al cambiar de carpeta se perderán. ¿Desea continuar?",
     "cancel": "Cancelar",
     "discard": "No guardar",
     "save": "Guardar",
@@ -121,6 +122,9 @@
       "fileAlreadyOpen": "El archivo ya está abierto",
       "noSession": "Sin sesión SFTP",
       "unsavedChanges": "Tiene cambios sin guardar"
+    },
+    "tree": {
+      "truncated": "+{{count}} elementos más no mostrados"
     }
   }
 }

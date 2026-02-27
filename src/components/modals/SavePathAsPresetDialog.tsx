@@ -85,7 +85,7 @@ export const SavePathAsPresetDialog: React.FC<SavePathAsPresetDialogProps> = ({
         auth_type: 'agent' as const,
       }));
 
-      // 构建连接配置
+      // 构建连接配置（含跳板机链路）
       const request: SaveConnectionRequest = {
         name: name.trim(),
         group: null,
@@ -94,11 +94,8 @@ export const SavePathAsPresetDialog: React.FC<SavePathAsPresetDialogProps> = ({
         username: targetNode.username,
         auth_type: 'agent', // 默认使用 agent
         tags: ['从钻入路径保存'],
+        proxy_chain: proxyChain.length > 0 ? proxyChain : undefined,
       };
-
-      // TODO: 后端需要扩展 save_connection 以支持 proxy_chain
-      // 当前保存时会丢失跳板机链路信息
-      console.log('Proxy chain for future use:', proxyChain);
 
       // 保存连接
       await api.saveConnection(request);
