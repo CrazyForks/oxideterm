@@ -1,11 +1,11 @@
 # Third-Party Notices (Backend / Rust)
 
 This file lists third-party crates used by the Rust backend and their detected licenses (including transitive dependencies).
-Generated: 2026-02-19T19:43:40.836Z
+Generated: 2026-02-28T06:52:01.682Z
 
 ## Summary
-- MIT: 611
-- Apache-2.0: 460
+- MIT: 612
+- Apache-2.0: 461
 - Zlib: 20
 - Unicode-3.0: 19
 - BSD-3-Clause: 12
@@ -315,6 +315,7 @@ This report does not attempt to interpret SPDX boolean logic beyond simple group
 | nix | 0.25.1 | MIT | registry+https://github.com/rust-lang/crates.io-index |
 | nix | 0.29.0 | MIT | registry+https://github.com/rust-lang/crates.io-index |
 | nodrop | 0.1.14 | MIT, Apache-2.0 | registry+https://github.com/rust-lang/crates.io-index |
+| ntapi | 0.4.3 | Apache-2.0, MIT | registry+https://github.com/rust-lang/crates.io-index |
 | nu-ansi-term | 0.50.3 | MIT | registry+https://github.com/rust-lang/crates.io-index |
 | num_cpus | 1.17.0 | MIT, Apache-2.0 | registry+https://github.com/rust-lang/crates.io-index |
 | num_enum | 0.7.5 | BSD-3-Clause, MIT, Apache-2.0 | registry+https://github.com/rust-lang/crates.io-index |
