@@ -21,6 +21,7 @@ import {
   LayoutList,
   Puzzle,
   Monitor,
+  ScrollText,
 } from 'lucide-react';
 import { platform } from '../../lib/platform';
 import { useAppStore } from '../../store/appStore';
@@ -28,6 +29,7 @@ import { useSessionTreeStore } from '../../store/sessionTreeStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useLocalTerminalStore } from '../../store/localTerminalStore';
 import { usePluginStore } from '../../store/pluginStore';
+import { useEventLogStore } from '../../store/eventLogStore';
 import { resolvePluginIcon } from '../../lib/plugin/pluginIconResolver';
 import { useToast } from '../../hooks/useToast';
 import { useConfirm } from '../../hooks/useConfirm';
@@ -671,8 +673,12 @@ export const Sidebar = () => {
     ...pluginPanelDefs,
   ];
 
+  const eventLogUnread = useEventLogStore((s) => s.unreadErrors);
+  const eventLogOpen = useEventLogStore((s) => s.isOpen);
+
   const bottomButtons: SidebarButtonDef[] = [
     { kind: 'action', key: 'local_terminal', icon: Square, titleKey: 'sidebar.actions.new_local_terminal', badge: (localTerminals.size + backgroundSessions.size) > 0 ? (localTerminals.size + backgroundSessions.size) : undefined, badgeColor: backgroundSessions.size > 0 ? 'bg-amber-500' : 'bg-blue-500' },
+    { kind: 'toggle', key: 'event_log', icon: ScrollText, titleKey: 'sidebar.panels.event_log', badge: eventLogUnread > 0 ? eventLogUnread : undefined, badgeColor: 'bg-red-500' },
     { kind: 'tab', key: 'file_manager', icon: FolderOpen, titleKey: 'sidebar.panels.files' },
     ...(!platform.isLinux ? [{ kind: 'tab' as const, key: platform.isMac ? 'launcher' as const : 'graphics' as const, icon: Monitor, titleKey: platform.isMac ? 'launcher.tabTitle' : 'graphics.tab_title' }] : []),
     { kind: 'tab', key: 'plugin_manager', icon: Puzzle, titleKey: 'sidebar.panels.plugins' },
@@ -689,6 +695,9 @@ export const Sidebar = () => {
     if (def.kind === 'toggle' && def.key === 'ai') {
       return !aiSidebarCollapsed ? 'secondary' : 'ghost';
     }
+    if (def.kind === 'toggle' && def.key === 'event_log') {
+      return eventLogOpen ? 'secondary' : 'ghost';
+    }
     return 'ghost';
   };
 
@@ -700,6 +709,8 @@ export const Sidebar = () => {
       createTab(def.key as Parameters<typeof createTab>[0]);
     } else if (def.kind === 'toggle' && def.key === 'ai') {
       toggleAiSidebar();
+    } else if (def.kind === 'toggle' && def.key === 'event_log') {
+      useEventLogStore.getState().togglePanel();
     } else if (def.kind === 'action' && def.key === 'local_terminal') {
       if (backgroundSessions.size > 0) {
         setBgPopoverOpen(!bgPopoverOpen);

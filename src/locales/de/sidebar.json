@@ -29,7 +29,8 @@
       "system_health": "Systemzustand",
       "session_manager": "Sitzungsmanager",
       "open_session_manager": "Sitzungsmanager öffnen",
-      "plugins": "Plugins"
+      "plugins": "Plugins",
+      "event_log": "Ereignisprotokoll"
     },
     "tooltips": {
       "settings": "Einstellungen",

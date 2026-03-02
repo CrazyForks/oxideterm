@@ -29,7 +29,8 @@
       "system_health": "Stato del sistema",
       "session_manager": "Gestore sessioni",
       "open_session_manager": "Apri gestore sessioni",
-      "plugins": "Plugin"
+      "plugins": "Plugin",
+      "event_log": "Registro eventi"
     },
     "tooltips": {
       "settings": "Impostazioni",

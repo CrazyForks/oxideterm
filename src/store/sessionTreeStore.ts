@@ -15,6 +15,7 @@ import { listen } from '@tauri-apps/api/event';
 import { api, nodeSftpInit } from '../lib/api';
 import { useReconnectOrchestratorStore } from './reconnectOrchestratorStore';
 import { topologyResolver } from '../lib/topologyResolver';
+import { useEventLogStore } from './eventLogStore';
 import { useSettingsStore } from './settingsStore';
 import { useAppStore } from './appStore';
 import type { 
@@ -659,12 +660,26 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
       // 检查节点是否已在连接中（通过锁）
       if (get().isNodeConnecting(nodeId)) {
         console.log(`[connectNode] Node ${nodeId} is already connecting (locked), skipping`);
+        useEventLogStore.getState().addEntry({
+          severity: 'info',
+          category: 'connection',
+          nodeId,
+          title: 'event_log.events.already_connecting',
+          source: 'connectNode',
+        });
         return;
       }
       
       // 检查前端状态，避免重复连接（双重检查）
       if (node.state.status === 'connecting' || node.state.status === 'connected') {
         console.log(`[connectNode] Node ${nodeId} is already ${node.state.status}, skipping`);
+        useEventLogStore.getState().addEntry({
+          severity: 'info',
+          category: 'connection',
+          nodeId,
+          title: node.state.status === 'connected' ? 'event_log.events.already_connected' : 'event_log.events.already_connecting',
+          source: 'connectNode',
+        });
         return;
       }
       
@@ -709,9 +724,28 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
         await get().fetchTree();
         
         console.log(`[connectNode] Node ${nodeId} connected successfully`);
+        
+        // 写入事件日志
+        useEventLogStore.getState().addEntry({
+          severity: 'info',
+          category: 'connection',
+          nodeId,
+          title: 'event_log.events.connected',
+          source: 'connect_node',
+        });
       } catch (e) {
         // 失败时回滚到 failed 状态
         console.error(`[connectNode] Node ${nodeId} connection failed:`, e);
+        
+        // 写入事件日志
+        useEventLogStore.getState().addEntry({
+          severity: 'error',
+          category: 'connection',
+          nodeId,
+          title: 'event_log.events.node_state_error',
+          detail: String(e),
+          source: 'connect_node',
+        });
         try {
           await api.updateTreeNodeState(nodeId, 'failed', String(e));
         } catch (updateErr) {
@@ -789,7 +823,19 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
         topologyResolver.unregister(n.id);
       }
       
-      // 7. 调用后端断开节点（会递归断开子节点并更新状态）
+      // 7. 写入事件日志
+      useEventLogStore.getState().addEntry({
+        severity: 'info',
+        category: 'connection',
+        nodeId,
+        title: 'event_log.events.disconnected',
+        detail: allAffectedNodes.length > 1
+          ? `event_log.events.affected_children:${allAffectedNodes.length - 1}`
+          : undefined,
+        source: 'disconnect_node',
+      });
+      
+      // 8. 调用后端断开节点（会递归断开子节点并更新状态）
       try {
         await api.disconnectTreeNode(nodeId);
       } catch (e) {

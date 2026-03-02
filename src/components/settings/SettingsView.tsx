@@ -383,95 +383,89 @@ const HelpAboutSection = () => {
                 </div>
 
                 {/* Update check UI */}
-                <div className="mt-4 pt-4 border-t border-theme-border/50">
-                    {updater.status === 'idle' && (
+                <div className="mt-4 pt-4 border-t border-theme-border/50 space-y-2">
+                    <div className="flex items-center gap-3">
+                        {/* 检查更新按钮 — 始终显示，下载/重启时禁用 */}
                         <Button
                             variant="outline"
                             size="sm"
                             onClick={updater.checkForUpdate}
-                            className="gap-2"
+                            disabled={updater.status === 'checking' || updater.status === 'downloading' || updater.status === 'ready'}
+                            className="gap-2 shrink-0"
                         >
-                            <RefreshCw className="h-3.5 w-3.5" />
+                            {updater.status === 'checking'
+                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                : <RefreshCw className="h-3.5 w-3.5" />
+                            }
                             {t('settings_view.help.check_update')}
                         </Button>
-                    )}
 
-                    {updater.status === 'checking' && (
-                        <div className="flex items-center gap-2 text-sm text-theme-text-muted">
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            {t('settings_view.help.checking')}
-                        </div>
-                    )}
-
-                    {updater.status === 'up-to-date' && (
-                        <div className="flex items-center gap-2 text-sm text-emerald-400">
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                            {t('settings_view.help.up_to_date')}
-                        </div>
-                    )}
-
-                    {updater.status === 'available' && (
-                        <div className="flex items-center justify-between">
-                            <div className="text-sm">
+                        {/* 各状态行内提示 */}
+                        {updater.status === 'checking' && (
+                            <span className="text-sm text-theme-text-muted">
+                                {t('settings_view.help.checking')}
+                            </span>
+                        )}
+                        {updater.status === 'up-to-date' && (
+                            <span className="flex items-center gap-1.5 text-sm text-emerald-400">
+                                <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                                {t('settings_view.help.up_to_date')}
+                            </span>
+                        )}
+                        {updater.status === 'available' && (
+                            <span className="flex items-center gap-1.5 text-sm">
                                 <span className="text-theme-text">{t('settings_view.help.update_available')}</span>
-                                <span className="ml-2 font-mono text-theme-accent">v{updater.newVersion}</span>
-                            </div>
+                                <span className="font-mono text-theme-accent">v{updater.newVersion}</span>
+                            </span>
+                        )}
+                        {updater.status === 'downloading' && (
+                            <span className="text-sm text-theme-text-muted">
+                                {t('settings_view.help.downloading')} {updater.downloadProgress}%
+                            </span>
+                        )}
+                        {updater.status === 'ready' && (
+                            <span className="text-sm text-emerald-400">
+                                {t('settings_view.help.ready_to_restart')}
+                            </span>
+                        )}
+                        {updater.status === 'error' && (
+                            <span className="text-sm text-red-400 truncate">
+                                {updater.errorMessage || t('settings_view.help.update_error')}
+                            </span>
+                        )}
+
+                        {/* 下载 / 重启操作按钮 */}
+                        {updater.status === 'available' && (
                             <Button
                                 variant="default"
                                 size="sm"
                                 onClick={updater.downloadAndInstall}
-                                className="gap-2"
+                                className="gap-2 shrink-0 ml-auto"
                             >
                                 <ArrowDownToLine className="h-3.5 w-3.5" />
                                 {t('settings_view.help.download_install')}
                             </Button>
-                        </div>
-                    )}
-
-                    {updater.status === 'downloading' && (
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between text-sm">
-                                <span className="text-theme-text-muted">{t('settings_view.help.downloading')}</span>
-                                <span className="text-theme-text font-mono">{updater.downloadProgress}%</span>
-                            </div>
-                            <div className="h-1.5 bg-theme-bg rounded-full overflow-hidden">
-                                <div
-                                    className="h-full bg-theme-accent rounded-full transition-[width] duration-300"
-                                    style={{ width: `${updater.downloadProgress}%` }}
-                                />
-                            </div>
-                        </div>
-                    )}
-
-                    {updater.status === 'ready' && (
-                        <div className="flex items-center justify-between">
-                            <span className="text-sm text-emerald-400">{t('settings_view.help.ready_to_restart')}</span>
+                        )}
+                        {updater.status === 'ready' && (
                             <Button
                                 variant="default"
                                 size="sm"
                                 onClick={updater.restartApp}
-                                className="gap-2"
+                                className="gap-2 shrink-0 ml-auto"
                             >
                                 <RotateCw className="h-3.5 w-3.5" />
                                 {t('settings_view.help.restart_now')}
                             </Button>
-                        </div>
-                    )}
+                        )}
+                    </div>
 
-                    {updater.status === 'error' && (
-                        <div className="flex items-center justify-between">
-                            <span className="text-sm text-red-400 truncate mr-2">
-                                {updater.errorMessage || t('settings_view.help.update_error')}
-                            </span>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={updater.checkForUpdate}
-                                className="gap-2 shrink-0"
-                            >
-                                <RefreshCw className="h-3.5 w-3.5" />
-                                {t('settings_view.help.retry')}
-                            </Button>
+                    {/* 下载进度条 */}
+                    {updater.status === 'downloading' && (
+                        <div className="h-1.5 bg-theme-bg rounded-full overflow-hidden">
+                            <div
+                                className="h-full bg-theme-accent rounded-full transition-[width] duration-300"
+                                style={{ width: `${updater.downloadProgress}%` }}
+                            />
                         </div>
                     )}
                 </div>

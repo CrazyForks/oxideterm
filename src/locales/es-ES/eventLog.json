@@ -1,0 +1,50 @@
+{
+  "event_log": {
+    "title": "Registro de eventos",
+    "empty": "Sin eventos",
+    "clear": "Limpiar todo",
+    "close": "Cerrar panel",
+    "all": "Todo",
+    "filter_severity": "Filtrar por gravedad",
+    "filter_category": "Filtrar por categoría",
+    "severity": {
+      "info": "Info",
+      "warn": "Advertencia",
+      "error": "Error"
+    },
+    "category": {
+      "connection": "Conexión",
+      "reconnect": "Reconexión",
+      "node": "Nodo"
+    },
+    "events": {
+      "connected": "Conectado",
+      "disconnected": "Desconectado",
+      "link_down": "Enlace caído",
+      "reconnecting": "Reconectando",
+      "affected_children": "{{count}} conexión(es) secundaria(s) afectada(s)",
+      "node_state_ready": "Nodo listo",
+      "node_state_connecting": "Nodo conectando",
+      "node_state_error": "Error de nodo",
+      "node_state_disconnected": "Nodo desconectado",
+      "node_state_unknown": "Estado del nodo cambiado",
+      "already_connecting": "Ya conectando, omitido",
+      "already_connected": "Ya conectado, omitido",
+      "reconnect_phase": "Pipeline de reconexión"
+    },
+    "phase": {
+      "queued": "En cola",
+      "snapshot": "Instantánea",
+      "grace-period": "Período de gracia",
+      "ssh-connect": "Conexión SSH",
+      "await-terminal": "Esperando terminal",
+      "restore-forwards": "Restaurar reenvíos",
+      "resume-transfers": "Reanudar transferencias",
+      "restore-ide": "Restaurar IDE",
+      "verify": "Verificar",
+      "done": "Completado",
+      "failed": "Fallido",
+      "cancelled": "Cancelado"
+    }
+  }
+}

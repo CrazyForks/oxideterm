@@ -29,7 +29,8 @@
       "system_health": "Santé du système",
       "session_manager": "Gestionnaire de sessions",
       "open_session_manager": "Ouvrir le gestionnaire de sessions",
-      "plugins": "Extensions"
+      "plugins": "Extensions",
+      "event_log": "Journal d'événements"
     },
     "tooltips": {
       "settings": "Paramètres",

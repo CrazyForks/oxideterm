@@ -29,7 +29,8 @@
       "system_health": "系统健康",
       "session_manager": "会话管理器",
       "open_session_manager": "打开会话管理器",
-      "plugins": "插件"
+      "plugins": "插件",
+      "event_log": "事件日志"
     },
     "tooltips": {
       "settings": "设置",

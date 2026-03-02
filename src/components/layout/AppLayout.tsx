@@ -1,7 +1,9 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from 'react-resizable-panels';
 import { Sidebar } from './Sidebar';
 import { AiSidebar } from './AiSidebar';
+import { EventLogPanel } from './EventLogPanel';
 import { TabBar } from './TabBar';
 import { useAppStore, getSession } from '../../store/appStore';
 import { TerminalView } from '../terminal/TerminalView';
@@ -17,6 +19,7 @@ import { Plus, Terminal as TerminalIcon } from 'lucide-react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useLocalTerminalStore } from '../../store/localTerminalStore';
+import { useEventLogStore } from '../../store/eventLogStore';
 import { useTabBgActive } from '../../hooks/useTabBackground';
 import { platform } from '../../lib/platform';
 
@@ -150,6 +153,10 @@ export const AppLayout = () => {
   const { tabs, activeTabId, setActivePaneId, closePane } = useAppStore();
   const monitorBgActive = useTabBgActive('connection_monitor');
   const zenMode = useSettingsStore((s) => s.settings.sidebarUI.zenMode);
+  const eventLogOpen = useEventLogStore((s) => s.isOpen);
+  const eventLogPanelSize = useEventLogStore((s) => s.panelSize);
+  const setEventLogPanelSize = useEventLogStore((s) => s.setPanelSize);
+  const pendingEventLogPanelSizeRef = useRef<number | null>(null);
 
   // Zen mode hint — show briefly on enter
   const [showZenHint, setShowZenHint] = useState(false);
@@ -184,6 +191,33 @@ export const AppLayout = () => {
     closePane(tabId, paneId);
   }, [closePane]);
 
+  const flushEventLogPanelSize = useCallback(() => {
+    const pendingSize = pendingEventLogPanelSizeRef.current;
+    if (pendingSize === null) return;
+    pendingEventLogPanelSizeRef.current = null;
+    setEventLogPanelSize(pendingSize);
+  }, [setEventLogPanelSize]);
+
+  const handleEventLogPanelResize = useCallback<NonNullable<ComponentProps<typeof Panel>['onResize']>>((panelSize) => {
+    const normalizedSize = parseFloat(String(panelSize).replace('%', ''));
+    if (Number.isNaN(normalizedSize)) return;
+
+    pendingEventLogPanelSizeRef.current = Math.min(90, Math.max(8, normalizedSize));
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('pointerup', flushEventLogPanelSize);
+    window.addEventListener('mouseup', flushEventLogPanelSize);
+    window.addEventListener('touchend', flushEventLogPanelSize);
+
+    return () => {
+      window.removeEventListener('pointerup', flushEventLogPanelSize);
+      window.removeEventListener('mouseup', flushEventLogPanelSize);
+      window.removeEventListener('touchend', flushEventLogPanelSize);
+      flushEventLogPanelSize();
+    };
+  }, [flushEventLogPanelSize]);
+
   return (
     <div className="flex h-full w-full bg-theme-bg text-oxide-text overflow-hidden">
       {/* Modals */}
@@ -197,7 +231,9 @@ export const AppLayout = () => {
       <div className="flex-1 flex flex-col min-w-0">
         {!zenMode && <TabBar />}
 
-        <div className="flex-1 relative bg-theme-bg overflow-hidden">
+        <PanelGroup orientation="vertical" className="flex-1">
+          <Panel minSize={30}>
+            <div className="h-full relative bg-theme-bg overflow-hidden">
           {tabs.length === 0 ? (
             <EmptyState />
           ) : (
@@ -348,7 +384,26 @@ export const AppLayout = () => {
               })}
             </>
           )}
-        </div>
+            </div>
+          </Panel>
+
+          {/* Event Log Bottom Panel */}
+          {eventLogOpen && !zenMode && (
+            <>
+              <PanelResizeHandle className="h-1 group relative cursor-row-resize">
+                <div className="absolute inset-x-0 top-0 bottom-0 bg-theme-border/50 group-hover:bg-theme-accent/50 group-active:bg-theme-accent transition-colors" />
+              </PanelResizeHandle>
+              <Panel
+                defaultSize={eventLogPanelSize}
+                minSize={8}
+                collapsible
+                onResize={handleEventLogPanelResize}
+              >
+                <EventLogPanel />
+              </Panel>
+            </>
+          )}
+        </PanelGroup>
       </div>
 
       {/* AI Sidebar - Right side (hidden in zen mode) */}
