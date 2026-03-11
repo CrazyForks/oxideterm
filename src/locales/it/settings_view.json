@@ -311,7 +311,15 @@
       "system_prompt_placeholder": "Inserisci un prompt di sistema personalizzato... (lascia vuoto per usare il predefinito)",
       "system_prompt_hint": "Personalizza il comportamento dell'assistente AI. Lascia vuoto per usare il prompt dell'assistente terminale predefinito.",
       "max_response_tokens": "Token di risposta max",
-      "max_response_tokens_hint": "Numero massimo di token che l'IA può usare per la risposta. Lasciare vuoto per il calcolo automatico."
+      "max_response_tokens_hint": "Numero massimo di token che l'IA può usare per la risposta. Lasciare vuoto per il calcolo automatico.",
+      "tool_use": "Uso degli strumenti",
+      "tool_use_enabled": "Abilita uso strumenti",
+      "tool_use_enabled_hint": "Consenti all'IA di eseguire comandi, leggere file ed eseguire azioni sui server remoti tramite Function Calling.",
+      "tool_use_auto_approve_read": "Approvazione auto. strumenti di sola lettura",
+      "tool_use_auto_approve_read_hint": "Approva automaticamente read_file, list_directory, grep_search e git_status senza conferma.",
+      "tool_use_auto_approve_all": "Approvazione auto. tutti gli strumenti (Pericoloso)",
+      "tool_use_auto_approve_all_hint": "Approva automaticamente TUTTI gli strumenti inclusi terminal_exec e write_file. L'IA avrà accesso completo all'esecuzione dei comandi sul server remoto.",
+      "tool_use_auto_approve_all_warning": "Questo conferisce all'IA capacità di esecuzione comandi senza restrizioni. Utilizzare solo su server affidabili, non di produzione."
     },
     "sftp": {
       "title": "Trasferimento SFTP",

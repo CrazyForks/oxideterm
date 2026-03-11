@@ -311,7 +311,15 @@
       "system_prompt_placeholder": "Benutzerdefinierten System-Prompt eingeben... (leer lassen für Standard)",
       "system_prompt_hint": "Passen Sie das Verhalten des KI-Assistenten an. Leer lassen, um den Standard-Terminal-Assistenten-Prompt zu verwenden.",
       "max_response_tokens": "Max. Antwort-Tokens",
-      "max_response_tokens_hint": "Maximale Token-Anzahl für die KI-Antwort. Leer lassen für automatische Berechnung."
+      "max_response_tokens_hint": "Maximale Token-Anzahl für die KI-Antwort. Leer lassen für automatische Berechnung.",
+      "tool_use": "Werkzeugnutzung",
+      "tool_use_enabled": "Werkzeugnutzung aktivieren",
+      "tool_use_enabled_hint": "Erlaubt der KI, über Function Calling Befehle auszuführen, Dateien zu lesen und Aktionen auf Remote-Servern durchzuführen.",
+      "tool_use_auto_approve_read": "Lesezugriff-Tools automatisch genehmigen",
+      "tool_use_auto_approve_read_hint": "read_file, list_directory, grep_search und git_status ohne Bestätigung automatisch genehmigen.",
+      "tool_use_auto_approve_all": "Alle Tools automatisch genehmigen (Gefährlich)",
+      "tool_use_auto_approve_all_hint": "Alle Tools einschließlich terminal_exec und write_file automatisch genehmigen. Die KI erhält vollen Befehlszugriff auf dem Remote-Server.",
+      "tool_use_auto_approve_all_warning": "Dies gibt der KI uneingeschränkte Befehlsausführung. Nur auf vertrauenswürdigen, nicht-produktiven Servern verwenden."
     },
     "sftp": {
       "title": "SFTP-Übertragung",

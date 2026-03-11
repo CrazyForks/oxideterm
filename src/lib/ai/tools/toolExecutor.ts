@@ -19,6 +19,10 @@ import { isCommandDenied } from './toolDefinitions';
 
 /** Max output size returned from a tool execution (bytes) */
 const MAX_OUTPUT_BYTES = 8192;
+const MAX_COMMAND_TIMEOUT_SECS = 60;
+const MAX_LIST_DEPTH = 8;
+const MAX_GREP_RESULTS = 200;
+const MAX_PATTERN_LENGTH = 200;
 
 /** Context needed to execute tools against the correct remote session */
 export type ToolExecutionContext = {
@@ -81,6 +85,14 @@ function truncateOutput(output: string): { text: string; truncated: boolean } {
   return { text: output.slice(0, MAX_OUTPUT_BYTES) + '\n... (output truncated)', truncated: true };
 }
 
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(Math.max(value, minimum), maximum);
+}
+
+function hasPotentiallyCatastrophicRegex(pattern: string): boolean {
+  return /(\([^)]*[+*][^)]*\))[+*]|([+*])\1/.test(pattern);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Individual Tool Executors
 // ═══════════════════════════════════════════════════════════════════════════
@@ -91,7 +103,7 @@ async function execTerminalCommand(
   startTime: number,
   toolCallId: string,
 ): Promise<AiToolResult> {
-  const command = args.command as string;
+  const command = typeof args.command === 'string' ? args.command.trim() : '';
   if (!command) {
     return { toolCallId, toolName: 'terminal_exec', success: false, output: '', error: 'Missing required argument: command', durationMs: Date.now() - startTime };
   }
@@ -102,7 +114,7 @@ async function execTerminalCommand(
   }
 
   const cwd = args.cwd as string | undefined;
-  const timeoutSecs = (args.timeout_secs as number) || 30;
+  const timeoutSecs = clamp(Number(args.timeout_secs) || 30, 1, MAX_COMMAND_TIMEOUT_SECS);
 
   const result = await nodeIdeExecCommand(context.nodeId, command, cwd, timeoutSecs);
   const combined = result.stderr
@@ -170,17 +182,12 @@ async function execWriteFile(
     return { toolCallId, toolName: 'write_file', success: true, output: `Written ${result.size} bytes to ${path} (hash: ${result.hash})`, durationMs: Date.now() - startTime };
   }
 
-  // Fallback: write via SSH exec using heredoc
-  // Use a random delimiter to avoid collision with content
-  const delimiter = `EOF_${Date.now()}`;
-  const cmd = `cat > ${shellEscape(path)} << '${delimiter}'\n${content}\n${delimiter}`;
-  const result = await nodeIdeExecCommand(context.nodeId, cmd, undefined, 10);
   return {
     toolCallId,
     toolName: 'write_file',
-    success: result.exitCode === 0,
-    output: result.exitCode === 0 ? `Written to ${path}` : '',
-    error: result.exitCode !== 0 ? result.stderr : undefined,
+    success: false,
+    output: '',
+    error: 'write_file requires remote agent support and is unavailable on exec fallback',
     durationMs: Date.now() - startTime,
   };
 }
@@ -196,7 +203,7 @@ async function execListDirectory(
     return { toolCallId, toolName: 'list_directory', success: false, output: '', error: 'Missing required argument: path', durationMs: Date.now() - startTime };
   }
 
-  const maxDepth = (args.max_depth as number) || 3;
+  const maxDepth = clamp(Number(args.max_depth) || 3, 1, MAX_LIST_DEPTH);
 
   if (context.agentAvailable) {
     const result = await nodeAgentListTree(context.nodeId, path, maxDepth, 500);
@@ -233,7 +240,15 @@ async function execGrepSearch(
   }
 
   const caseSensitive = (args.case_sensitive as boolean) ?? false;
-  const maxResults = (args.max_results as number) || 50;
+  const maxResults = clamp(Number(args.max_results) || 50, 1, MAX_GREP_RESULTS);
+
+  if (pattern.length > MAX_PATTERN_LENGTH) {
+    return { toolCallId, toolName: 'grep_search', success: false, output: '', error: `Pattern too long (max ${MAX_PATTERN_LENGTH} characters)`, durationMs: Date.now() - startTime };
+  }
+
+  if (hasPotentiallyCatastrophicRegex(pattern)) {
+    return { toolCallId, toolName: 'grep_search', success: false, output: '', error: 'Pattern rejected: potentially catastrophic regular expression', durationMs: Date.now() - startTime };
+  }
 
   if (context.agentAvailable) {
     const matches = await nodeAgentGrep(context.nodeId, pattern, path, caseSensitive, maxResults);

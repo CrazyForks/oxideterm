@@ -29,7 +29,9 @@ export const BUILTIN_TOOLS: AiToolDefinition[] = [
         },
         timeout_secs: {
           type: 'number',
-          description: 'Timeout in seconds. Default: 30.',
+          minimum: 1,
+          maximum: 60,
+          description: 'Timeout in seconds. Default: 30. Max: 60.',
         },
       },
       required: ['command'],
@@ -82,7 +84,9 @@ export const BUILTIN_TOOLS: AiToolDefinition[] = [
         },
         max_depth: {
           type: 'number',
-          description: 'Maximum recursion depth. Default: 3.',
+          minimum: 1,
+          maximum: 8,
+          description: 'Maximum recursion depth. Default: 3. Max: 8.',
         },
       },
       required: ['path'],
@@ -109,7 +113,9 @@ export const BUILTIN_TOOLS: AiToolDefinition[] = [
         },
         max_results: {
           type: 'number',
-          description: 'Maximum number of matches to return. Default: 50.',
+          minimum: 1,
+          maximum: 200,
+          description: 'Maximum number of matches to return. Default: 50. Max: 200.',
         },
       },
       required: ['pattern', 'path'],
@@ -154,21 +160,54 @@ export const WRITE_TOOLS = new Set([
  * Command deny-list for terminal_exec safety.
  * These patterns are checked against the command string before execution.
  * If any pattern matches, the command is rejected without prompting the user.
+ *
+ * NOTE: Deny-lists are fundamentally incomplete. This is a defense-in-depth
+ * measure, not a security boundary. The real boundary is user approval.
  */
 export const COMMAND_DENY_LIST: RegExp[] = [
-  /\brm\s+(-[rfRF\s]*)*\s*\/\s*$/,     // rm -rf /
+  // ── Destructive filesystem ──
+  /\brm\s+.*\s+\/(\s|$|\*)/,            // rm ... / or rm ... /*
+  /\brm\s+(-[a-zA-Z]*)*\s*--no-preserve-root/, // rm --no-preserve-root
   /\bmkfs\b/,                           // mkfs (format disk)
   /\bdd\s+if=/,                         // dd if= (raw disk write)
   /\bfdisk\b/,                          // fdisk (partition table)
+  /\bchmod\s+777\s+\//,                 // chmod 777 /
+  /\bchown\s+-R\s+.*\s+\//,            // chown -R ... /
+
+  // ── Privilege escalation ──
+  /\bsudo\b/,                           // sudo
+  /\bdoas\b/,                           // doas (OpenBSD)
+  /\bpkexec\b/,                         // pkexec (Polkit)
+  /\brunuser\b/,                        // runuser (systemd)
+  /\brun0\b/,                           // run0 (systemd)
+  /\bsu\s+-?c\b/,                       // su -c "command"
+
+  // ── System control ──
   /\bshutdown\b/,                       // shutdown
   /\breboot\b/,                         // reboot
   /\bhalt\b/,                           // halt
   /\bpoweroff\b/,                       // poweroff
+  /\bsystemctl\s+(disable|mask)\b/,     // systemctl disable/mask
+
+  // ── Resource exhaustion ──
   /:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;?\s*:/, // fork bomb
-  /\bchmod\s+777\s+\//,                 // chmod 777 /
-  /\bchown\s+-R\s+.*\s+\//,            // chown -R ... /
+
+  // ── Network ──
   /\biptables\s+-F\b/,                  // iptables -F (flush all rules)
-  /\bsystemctl\s+disable\b/,           // systemctl disable (disable services)
+
+  // ── Remote code execution via pipe ──
+  /\b(?:curl|wget)\b[^\n]*\|\s*(?:sh|bash|zsh)\b/, // curl/wget | sh
+  /\b(?:curl|wget)\b[^\n]*-[oO]\s*[^\s]+.*;\s*(?:sh|bash|zsh)\b/, // curl -o file; sh file
+
+  // ── Encoding / obfuscation bypass ──
+  /\bbase64\b[^\n]*\|\s*(?:sh|bash|zsh)\b/, // base64 decode | sh
+  /\bprintf\b[^\n]*\|\s*(?:sh|bash|zsh)\b/, // printf | sh
+  /\becho\b[^\n]*\|\s*(?:sh|bash|zsh)\b/,   // echo ... | sh
+
+  // ── Dangerous builtins ──
+  /\beval\b/,                           // eval (arbitrary code execution)
+  /(?:^|[;&|]\s*)exec\s/,               // exec at command position (replaces shell process)
+  /\bsource\s/,                         // source (execute file in current shell)
 ];
 
 /**

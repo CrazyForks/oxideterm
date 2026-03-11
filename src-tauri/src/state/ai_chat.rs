@@ -76,6 +76,42 @@ pub struct ContextSnapshot {
     pub terminal_type: Option<String>,
 }
 
+/// Result of a tool execution persisted with an assistant message
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PersistedToolResult {
+    pub tool_call_id: String,
+    pub tool_name: String,
+    pub success: bool,
+    pub output: String,
+    pub error: Option<String>,
+    pub truncated: Option<bool>,
+    pub duration_ms: Option<i64>,
+}
+
+/// Valid tool execution states persisted with assistant messages
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PersistedToolCallStatus {
+    Pending,
+    Approved,
+    Rejected,
+    Running,
+    Completed,
+    Error,
+}
+
+/// Tool call metadata persisted with an assistant message
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PersistedToolCall {
+    pub id: String,
+    pub name: String,
+    pub arguments: String,
+    pub status: PersistedToolCallStatus,
+    pub result: Option<PersistedToolResult>,
+}
+
 /// A single message in an AI conversation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersistedMessage {
@@ -89,6 +125,9 @@ pub struct PersistedMessage {
     pub content: String,
     /// Unix timestamp (ms)
     pub timestamp: i64,
+    /// Tool calls associated with this assistant message
+    #[serde(default)]
+    pub tool_calls: Vec<PersistedToolCall>,
     /// Context snapshot at send time
     pub context_snapshot: Option<ContextSnapshot>,
 }
@@ -849,6 +888,7 @@ mod tests {
             role: "user".to_string(),
             content: "Hello".to_string(),
             timestamp: 1001,
+            tool_calls: vec![],
             context_snapshot: Some(ContextSnapshot {
                 cwd: Some("/home/user".to_string()),
                 selection: Some("error: command not found".to_string()),
@@ -914,6 +954,7 @@ mod tests {
                 role: if i % 2 == 0 { "user" } else { "assistant" }.to_string(),
                 content: format!("Message {}", i),
                 timestamp: 1000 + i as i64,
+                tool_calls: vec![],
                 context_snapshot: None,
             };
             store.save_message(msg).unwrap();
@@ -966,6 +1007,7 @@ mod tests {
                     role: "user".to_string(),
                     content: "Test".to_string(),
                     timestamp: 1000_i64,
+                    tool_calls: vec![],
                     context_snapshot: None,
                 };
                 store.save_message(msg).unwrap();

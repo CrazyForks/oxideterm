@@ -311,7 +311,15 @@
       "system_prompt_placeholder": "カスタムシステムプロンプトを入力...（空白はデフォルト使用）",
       "system_prompt_hint": "AIアシスタントの動作をカスタマイズします。空白のままにするとデフォルトのターミナルアシスタントプロンプトが使用されます。",
       "max_response_tokens": "最大応答トークン数",
-      "max_response_tokens_hint": "AIの応答に使用できる最大トークン数。空欄の場合は自動計算されます。"
+      "max_response_tokens_hint": "AIの応答に使用できる最大トークン数。空欄の場合は自動計算されます。",
+      "tool_use": "ツール使用",
+      "tool_use_enabled": "ツール使用を有効にする",
+      "tool_use_enabled_hint": "AIがFunction Callingを通じてリモートサーバーでコマンド実行、ファイル読み取り、操作を行うことを許可します。",
+      "tool_use_auto_approve_read": "読み取り専用ツールを自動承認",
+      "tool_use_auto_approve_read_hint": "read_file、list_directory、grep_search、git_status を確認なしで自動承認します。",
+      "tool_use_auto_approve_all": "すべてのツールを自動承認（危険）",
+      "tool_use_auto_approve_all_hint": "terminal_exec と write_file を含むすべてのツールを自動承認します。AIはリモートサーバーで完全なコマンド実行権限を持ちます。",
+      "tool_use_auto_approve_all_warning": "この設定はAIに無制限のコマンド実行能力を付与します。信頼できる非本番環境のサーバーでのみ使用してください。"
     },
     "sftp": {
       "title": "SFTP転送",

@@ -29,7 +29,7 @@ function convertMessages(messages: ChatMessage[]): {
       try { response = JSON.parse(msg.content); } catch { /* use as string */ }
       contents.push({
         role: 'user',
-        parts: [{ functionResponse: { name: msg.tool_call_id || 'unknown', response } }],
+        parts: [{ functionResponse: { name: msg.tool_name || 'unknown', response } }],
       });
     } else if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
       // Model message with function calls

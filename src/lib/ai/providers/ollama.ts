@@ -27,6 +27,35 @@ function convertTools(tools: AiToolDefinition[]): Array<{ type: 'function'; func
   }));
 }
 
+/**
+ * Convert ChatMessage[] to OpenAI-compatible format for Ollama.
+ * Transforms tool role messages and assistant tool_calls to the structure
+ * expected by Ollama's OpenAI-compatible endpoint.
+ */
+function convertMessages(messages: ChatMessage[]): Array<Record<string, unknown>> {
+  return messages.map((msg) => {
+    if (msg.role === 'tool') {
+      return {
+        role: 'tool',
+        tool_call_id: msg.tool_call_id,
+        content: msg.content,
+      };
+    }
+    if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
+      return {
+        role: 'assistant',
+        content: msg.content || null,
+        tool_calls: msg.tool_calls.map((tc) => ({
+          id: tc.id,
+          type: 'function',
+          function: { name: tc.name, arguments: tc.arguments },
+        })),
+      };
+    }
+    return { role: msg.role, content: msg.content };
+  });
+}
+
 export const ollamaProvider: AiStreamProvider = {
   type: 'ollama',
   displayName: 'Ollama (Local)',
@@ -44,7 +73,7 @@ export const ollamaProvider: AiStreamProvider = {
     try {
       const body: Record<string, unknown> = {
         model: config.model,
-        messages,
+        messages: convertMessages(messages),
         stream: true,
         ...(config.maxResponseTokens ? { max_tokens: config.maxResponseTokens } : {}),
       };

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import { api } from '../lib/api';
+import { nodeAgentStatus, nodeGetState } from '../lib/api';
 import { useSettingsStore } from './settingsStore';
 import { useSessionTreeStore } from './sessionTreeStore';
 import { gatherSidebarContext, type SidebarContext } from '../lib/sidebarContextProvider';
@@ -49,9 +50,10 @@ interface FullConversationDto {
   sessionId: string | null;
   messages: Array<{
     id: string;
-    role: 'user' | 'assistant' | 'system';
+    role: 'user' | 'assistant' | 'system' | 'tool';
     content: string;
     timestamp: number;
+    toolCalls?: AiToolCall[];
     context: string | null; // Backend returns just the buffer_tail as 'context'
   }>;
 }
@@ -135,6 +137,7 @@ function dtoToConversation(dto: FullConversationDto): AiConversation {
           role: m.role as 'assistant',
           content: parsed.content,
           thinkingContent: parsed.thinkingContent,
+          toolCalls: m.toolCalls,
           timestamp: m.timestamp,
           context: m.context || undefined,
         };
@@ -155,8 +158,9 @@ function dtoToConversation(dto: FullConversationDto): AiConversation {
       }
       return {
         id: m.id,
-        role: m.role,
+        role: m.role as AiChatMessage['role'],
         content: m.content,
+        toolCalls: m.toolCalls,
         timestamp: m.timestamp,
         context: m.context || undefined,
       };
@@ -429,6 +433,9 @@ export const useAiChatStore = create<AiChatStore>()((set, get) => ({
 
   // Send a message
   sendMessage: async (content, context, options) => {
+    // Guard against concurrent calls — only one tool loop at a time
+    if (get().isLoading) return;
+
     const skipUserMessage = options?.skipUserMessage ?? false;
     const { activeConversationId, createConversation, _addMessage, _setStreaming } = get();
 
@@ -664,12 +671,31 @@ export const useAiChatStore = create<AiChatStore>()((set, get) => ({
       if (toolUseEnabled && sidebarContext?.env.sessionId) {
         const node = useSessionTreeStore.getState().getNodeByTerminalId(sidebarContext.env.sessionId);
         if (node) {
-          toolContext = { nodeId: node.id, agentAvailable: false };
+          let agentAvailable = false;
+          let nodeReady = false;
+          try {
+            const nodeSnapshot = await nodeGetState(node.id);
+            if (nodeSnapshot.state.readiness !== 'ready') {
+              throw new Error('Node is not ready for tool execution');
+            }
+            nodeReady = true;
+            const agentStatus = await nodeAgentStatus(node.id);
+            agentAvailable = agentStatus.type === 'ready';
+          } catch {
+            toolContext = null;
+            agentAvailable = false;
+          }
+          if (nodeReady) {
+            toolContext = { nodeId: node.id, agentAvailable };
+          }
         }
       }
 
       const MAX_TOOL_ROUNDS = 10;
+      const MAX_TOOL_CALLS_PER_ROUND = 8;
       let round = 0;
+      const persistedToolCalls: AiToolCall[] = [];
+      let accumulatedContent = ''; // Preserves text from intermediate rounds for UI display
 
       // eslint-disable-next-line no-constant-condition
       while (true) {
@@ -683,11 +709,11 @@ export const useAiChatStore = create<AiChatStore>()((set, get) => ({
           switch (event.type) {
             case 'content':
               fullContent += event.content;
-              updateContent(fullContent, false, false);
+              updateContent(accumulatedContent + fullContent, false, false);
               break;
             case 'thinking':
               thinkingContent += event.content;
-              updateContent(fullContent || '...', false, true);
+              updateContent(accumulatedContent + (fullContent || '...'), false, true);
               break;
             case 'tool_call_complete':
               completedToolCalls.push({ id: event.id, name: event.name, arguments: event.arguments });
@@ -699,15 +725,24 @@ export const useAiChatStore = create<AiChatStore>()((set, get) => ({
           }
         }
 
-        // If no tool calls or no context to execute them, break
-        if (completedToolCalls.length === 0 || !toolContext) break;
+        if (completedToolCalls.length === 0) break;
+
+        if (!toolContext) {
+          fullContent += '\n\n[Tool execution unavailable: no active node context]';
+          updateContent(accumulatedContent + fullContent, true, false);
+          break;
+        }
 
         // Guard against infinite loops
         round++;
         if (round > MAX_TOOL_ROUNDS) {
           fullContent += '\n\n[Tool use limit reached]';
-          updateContent(fullContent, true, false);
+          updateContent(accumulatedContent + fullContent, true, false);
           break;
+        }
+
+        if (completedToolCalls.length > MAX_TOOL_CALLS_PER_ROUND) {
+          throw new Error(`Too many tool calls in one round (max ${MAX_TOOL_CALLS_PER_ROUND})`);
         }
 
         // ── Execute tool calls ──
@@ -717,9 +752,10 @@ export const useAiChatStore = create<AiChatStore>()((set, get) => ({
           arguments: tc.arguments,
           status: 'pending' as const,
         }));
+        persistedToolCalls.push(...toolCallEntries);
 
         // Show tool calls in UI immediately
-        updateContent(fullContent, true, false, toolCallEntries);
+        updateContent(accumulatedContent + fullContent, true, false, [...persistedToolCalls]);
 
         // Approve tools based on settings
         for (const tc of toolCallEntries) {
@@ -727,11 +763,17 @@ export const useAiChatStore = create<AiChatStore>()((set, get) => ({
           if (autoApproveAll || (autoApproveReadOnly && isReadOnly)) {
             tc.status = 'approved';
           } else {
-            // For now, auto-approve all when tool use is enabled
-            // Full approval UI will be added with ToolCallBlock component
-            tc.status = 'approved';
+            tc.status = 'rejected';
+            tc.result = {
+              toolCallId: tc.id,
+              toolName: tc.name,
+              success: false,
+              output: '',
+              error: 'Tool call requires explicit approval. Enable auto-approve-all in AI settings to allow write tools.',
+            };
           }
         }
+        updateContent(accumulatedContent + fullContent, true, false, [...persistedToolCalls]);
 
         // Execute approved tools
         const toolResultMessages: ProviderChatMessage[] = [];
@@ -740,14 +782,15 @@ export const useAiChatStore = create<AiChatStore>()((set, get) => ({
             tc.status = 'rejected';
             toolResultMessages.push({
               role: 'tool',
-              content: 'Tool call was rejected by the user.',
+              content: JSON.stringify({ error: tc.result?.error || 'Tool call was rejected by the user.' }),
               tool_call_id: tc.id,
+              tool_name: tc.name,
             });
             continue;
           }
 
           tc.status = 'running';
-          updateContent(fullContent, true, false, [...toolCallEntries]);
+          updateContent(accumulatedContent + fullContent, true, false, [...persistedToolCalls]);
 
           let parsedArgs: Record<string, unknown> = {};
           try {
@@ -762,7 +805,9 @@ export const useAiChatStore = create<AiChatStore>()((set, get) => ({
               role: 'tool',
               content: JSON.stringify({ error: 'Invalid JSON arguments' }),
               tool_call_id: tc.id,
+              tool_name: tc.name,
             });
+            updateContent(accumulatedContent + fullContent, true, false, [...persistedToolCalls]);
             continue;
           }
 
@@ -770,12 +815,13 @@ export const useAiChatStore = create<AiChatStore>()((set, get) => ({
           result.toolCallId = tc.id;
           tc.result = result;
           tc.status = result.success ? 'completed' : 'error';
-          updateContent(fullContent, true, false, [...toolCallEntries]);
+          updateContent(accumulatedContent + fullContent, true, false, [...persistedToolCalls]);
 
           toolResultMessages.push({
             role: 'tool',
             content: result.success ? result.output : JSON.stringify({ error: result.error }),
             tool_call_id: tc.id,
+            tool_name: tc.name,
           });
         }
 
@@ -789,17 +835,34 @@ export const useAiChatStore = create<AiChatStore>()((set, get) => ({
           apiMessages.push(trm);
         }
 
-        // Reset content for next round (model will generate new response)
+        // Accumulate content for UI display, reset for next API round
+        if (fullContent) {
+          accumulatedContent += fullContent + '\n\n';
+        }
         fullContent = '';
+
+        // Token budget check: estimate apiMessages size and break if exceeding context window
+        let apiTokenEstimate = 0;
+        for (const m of apiMessages) {
+          apiTokenEstimate += estimateTokens(m.content);
+        }
+        if (apiTokenEstimate > contextWindow * 0.9) {
+          fullContent = '[Tool use stopped: approaching context window limit]';
+          updateContent(accumulatedContent + fullContent, true, false, [...persistedToolCalls]);
+          break;
+        }
       }
+
+      // Combine accumulated + final content for display
+      const displayContent = accumulatedContent + fullContent;
 
       // For providers that handle thinking natively (Anthropic), use extracted thinking
       // For others (OpenAI-compatible), parse <thinking> tags from content
-      let mainContent = fullContent;
+      let mainContent = displayContent;
       let parsedThinking = thinkingContent || undefined;
 
-      if (!thinkingContent && fullContent.includes('<thinking>')) {
-        const parsed = parseThinkingContent(fullContent);
+      if (!thinkingContent && displayContent.includes('<thinking>')) {
+        const parsed = parseThinkingContent(displayContent);
         mainContent = parsed.content;
         parsedThinking = parsed.thinkingContent;
       }
@@ -818,6 +881,7 @@ export const useAiChatStore = create<AiChatStore>()((set, get) => ({
                     thinkingContent: parsedThinking,
                     isThinkingStreaming: false,
                     isStreaming: false,
+                    ...(persistedToolCalls.length > 0 ? { toolCalls: [...persistedToolCalls] } : {}),
                   }
                 : m
             ),
@@ -833,8 +897,9 @@ export const useAiChatStore = create<AiChatStore>()((set, get) => ({
             id: assistantMessage.id,
             conversationId: convId,
             role: 'assistant',
-            content: fullContent, // Store full content including thinking tags
+            content: displayContent, // Store accumulated content from all rounds
             timestamp: assistantMessage.timestamp,
+            toolCalls: persistedToolCalls,
             contextSnapshot: null,
           },
         });
@@ -866,6 +931,7 @@ export const useAiChatStore = create<AiChatStore>()((set, get) => ({
                 role: 'assistant',
                 content: currentMsg.content,
                 timestamp: assistantMessage.timestamp,
+                toolCalls: currentMsg.toolCalls || [],
                 contextSnapshot: null,
               },
             });
@@ -1655,6 +1721,7 @@ export const useAiChatStore = create<AiChatStore>()((set, get) => ({
           role: message.role,
           content: message.content,
           timestamp: message.timestamp,
+          toolCalls: message.toolCalls || [],
           contextSnapshot,
         },
       });

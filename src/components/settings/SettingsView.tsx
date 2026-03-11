@@ -30,7 +30,7 @@ import {
     SelectLabel,
     SelectSeparator
 } from '../ui/select';
-import { Monitor, Key, Terminal as TerminalIcon, Shield, Plus, Trash2, FolderInput, Sparkles, Square, HardDrive, HelpCircle, Github, ExternalLink, Keyboard, RefreshCw, ImageIcon, X, Code2, WifiOff, Download, Upload, Network, ArrowLeftRight, Settings, Folder, ListTree, Rocket, Puzzle, Activity, Loader2, CheckCircle2, ArrowDownToLine, RotateCw } from 'lucide-react';
+import { Monitor, Key, Terminal as TerminalIcon, Shield, Plus, Trash2, FolderInput, Sparkles, Square, HardDrive, HelpCircle, Github, ExternalLink, Keyboard, RefreshCw, ImageIcon, X, Code2, WifiOff, Download, Upload, Network, ArrowLeftRight, Settings, Folder, ListTree, Rocket, Puzzle, Activity, Loader2, CheckCircle2, ArrowDownToLine, RotateCw, Wrench } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useLocalTerminalStore } from '../../store/localTerminalStore';
 import { SshKeyInfo, SshHostInfo } from '../../types';
@@ -2158,6 +2158,73 @@ export const SettingsView = () => {
                                               className="w-32 bg-theme-bg border border-theme-border rounded-md px-2 py-1 text-sm text-theme-text placeholder-theme-text-muted/40 focus:outline-none focus:ring-1 focus:ring-theme-accent/40"
                                             />
                                           </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <Separator className="my-6 opacity-50" />
+
+                                {/* Tool Use Settings */}
+                                <div className={ai.enabled ? "" : "opacity-50 pointer-events-none"}>
+                                    <h4 className="text-sm font-medium text-theme-text mb-4 uppercase tracking-wider flex items-center gap-2">
+                                        <Wrench className="w-4 h-4" />
+                                        {t('settings_view.ai.tool_use')}
+                                    </h4>
+
+                                    {/* Enable Tool Use */}
+                                    <div className="flex items-center justify-between mb-4">
+                                        <div>
+                                            <Label className="text-theme-text">{t('settings_view.ai.tool_use_enabled')}</Label>
+                                            <p className="text-xs text-theme-text-muted mt-0.5">{t('settings_view.ai.tool_use_enabled_hint')}</p>
+                                        </div>
+                                        <Checkbox
+                                            id="tool-use-enabled"
+                                            checked={ai.toolUse?.enabled ?? false}
+                                            onCheckedChange={(checked) => {
+                                                updateAi('toolUse', { ...(ai.toolUse ?? { enabled: false, autoApproveReadOnly: true, autoApproveAll: false }), enabled: !!checked });
+                                            }}
+                                        />
+                                    </div>
+
+                                    {/* Sub-options — only visible when tool use enabled */}
+                                    <div className={ai.toolUse?.enabled ? "space-y-4 ml-4 pl-4 border-l border-theme-border/30" : "opacity-40 pointer-events-none space-y-4 ml-4 pl-4 border-l border-theme-border/30"}>
+                                        {/* Auto-approve read-only */}
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <Label className="text-theme-text text-sm">{t('settings_view.ai.tool_use_auto_approve_read')}</Label>
+                                                <p className="text-xs text-theme-text-muted mt-0.5">{t('settings_view.ai.tool_use_auto_approve_read_hint')}</p>
+                                            </div>
+                                            <Checkbox
+                                                id="tool-use-auto-approve-read"
+                                                checked={ai.toolUse?.autoApproveReadOnly ?? true}
+                                                onCheckedChange={(checked) => {
+                                                    updateAi('toolUse', { ...(ai.toolUse ?? { enabled: false, autoApproveReadOnly: true, autoApproveAll: false }), autoApproveReadOnly: !!checked });
+                                                }}
+                                            />
+                                        </div>
+
+                                        {/* Auto-approve all (dangerous) */}
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <Label className="text-theme-text text-sm">{t('settings_view.ai.tool_use_auto_approve_all')}</Label>
+                                                <p className="text-xs text-theme-text-muted mt-0.5">{t('settings_view.ai.tool_use_auto_approve_all_hint')}</p>
+                                            </div>
+                                            <Checkbox
+                                                id="tool-use-auto-approve-all"
+                                                checked={ai.toolUse?.autoApproveAll ?? false}
+                                                onCheckedChange={(checked) => {
+                                                    updateAi('toolUse', { ...(ai.toolUse ?? { enabled: false, autoApproveReadOnly: true, autoApproveAll: false }), autoApproveAll: !!checked });
+                                                }}
+                                            />
+                                        </div>
+
+                                        {/* Warning for auto-approve-all */}
+                                        {ai.toolUse?.autoApproveAll && (
+                                            <div className="p-3 rounded bg-red-500/10 border border-red-500/20">
+                                                <p className="text-xs text-red-400 leading-relaxed">
+                                                    <span className="font-semibold">⚠</span> {t('settings_view.ai.tool_use_auto_approve_all_warning')}
+                                                </p>
+                                            </div>
                                         )}
                                     </div>
                                 </div>

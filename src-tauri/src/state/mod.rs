@@ -8,7 +8,7 @@ pub mod store;
 
 pub use ai_chat::{
     AiChatError, AiChatStats, AiChatStore, ContextSnapshot, ConversationMeta, FullConversation,
-    PersistedMessage,
+    PersistedMessage, PersistedToolCall,
 };
 pub use forwarding::PersistedForward;
 pub use session::{BufferConfig, PersistedSession, SessionPersistence};

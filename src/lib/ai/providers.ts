@@ -58,6 +58,8 @@ export type ChatMessage = {
   tool_calls?: Array<{ id: string; name: string; arguments: string }>;
   /** Tool call ID this message is responding to (for tool messages) */
   tool_call_id?: string;
+  /** Tool name for providers that require it on tool result messages (e.g. Gemini) */
+  tool_name?: string;
 };
 
 /**

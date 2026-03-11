@@ -6,7 +6,10 @@
 //! - Save message with context snapshot
 //! - Delete/clear conversations
 
-use crate::state::{AiChatError, AiChatStore, ContextSnapshot, ConversationMeta, PersistedMessage};
+use crate::state::{
+    AiChatError, AiChatStore, ContextSnapshot, ConversationMeta, PersistedMessage,
+    PersistedToolCall,
+};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::State;
@@ -33,6 +36,8 @@ pub struct SaveMessageRequest {
     pub role: String,
     pub content: String,
     pub timestamp: i64,
+    #[serde(default)]
+    pub tool_calls: Vec<PersistedToolCall>,
     pub context_snapshot: Option<ContextSnapshotRequest>,
 }
 
@@ -96,6 +101,8 @@ pub struct MessageResponse {
     pub role: String,
     pub content: String,
     pub timestamp: i64,
+    #[serde(default)]
+    pub tool_calls: Vec<PersistedToolCall>,
     pub context: Option<String>, // Simplified: just the buffer_tail for display
 }
 
@@ -169,6 +176,7 @@ pub async fn ai_chat_get_conversation(
                 role: m.role,
                 content: m.content,
                 timestamp: m.timestamp,
+                tool_calls: m.tool_calls,
                 // Return buffer_tail as context for compatibility
                 context: m.context_snapshot.and_then(|c| c.buffer_tail),
             })
@@ -247,6 +255,7 @@ pub async fn ai_chat_save_message(
         role: request.role,
         content: request.content,
         timestamp: request.timestamp,
+        tool_calls: request.tool_calls,
         context_snapshot: request.context_snapshot.map(|c| ContextSnapshot {
             cwd: c.cwd,
             selection: c.selection,
@@ -308,6 +317,7 @@ pub async fn ai_chat_replace_conversation_messages(
         role: request.message.role,
         content: request.message.content,
         timestamp: request.message.timestamp,
+        tool_calls: request.message.tool_calls,
         context_snapshot: request.message.context_snapshot.map(|c| ContextSnapshot {
             cwd: c.cwd,
             selection: c.selection,

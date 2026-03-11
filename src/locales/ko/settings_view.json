@@ -311,7 +311,15 @@
       "system_prompt_placeholder": "사용자 정의 시스템 프롬프트 입력... (비워두면 기본값 사용)",
       "system_prompt_hint": "AI 어시스턴트의 동작을 사용자 정의합니다. 비워두면 기본 터미널 어시스턴트 프롬프트가 사용됩니다.",
       "max_response_tokens": "최대 응답 토큰",
-      "max_response_tokens_hint": "AI 응답에 사용할 수 있는 최대 토큰 수입니다. 자동 계산하려면 비워두세요."
+      "max_response_tokens_hint": "AI 응답에 사용할 수 있는 최대 토큰 수입니다. 자동 계산하려면 비워두세요.",
+      "tool_use": "도구 사용",
+      "tool_use_enabled": "도구 사용 활성화",
+      "tool_use_enabled_hint": "AI가 Function Calling을 통해 원격 서버에서 명령 실행, 파일 읽기 및 작업을 수행할 수 있도록 허용합니다.",
+      "tool_use_auto_approve_read": "읽기 전용 도구 자동 승인",
+      "tool_use_auto_approve_read_hint": "read_file, list_directory, grep_search, git_status를 확인 없이 자동 승인합니다.",
+      "tool_use_auto_approve_all": "모든 도구 자동 승인 (위험)",
+      "tool_use_auto_approve_all_hint": "terminal_exec 및 write_file을 포함한 모든 도구를 자동 승인합니다. AI가 원격 서버에서 전체 명령 실행 권한을 갖습니다.",
+      "tool_use_auto_approve_all_warning": "이 설정은 AI에 무제한 명령 실행 기능을 부여합니다. 신뢰할 수 있는 비프로덕션 서버에서만 사용하세요."
     },
     "sftp": {
       "title": "SFTP 전송",

@@ -311,7 +311,15 @@
       "system_prompt_placeholder": "Ingrese un prompt del sistema personalizado... (dejar vacío para usar el predeterminado)",
       "system_prompt_hint": "Personalice el comportamiento del asistente de IA. Deje vacío para usar el prompt de asistente de terminal predeterminado.",
       "max_response_tokens": "Tokens de respuesta máx.",
-      "max_response_tokens_hint": "Cantidad máxima de tokens que la IA puede usar en su respuesta. Dejar vacío para cálculo automático."
+      "max_response_tokens_hint": "Cantidad máxima de tokens que la IA puede usar en su respuesta. Dejar vacío para cálculo automático.",
+      "tool_use": "Uso de herramientas",
+      "tool_use_enabled": "Activar uso de herramientas",
+      "tool_use_enabled_hint": "Permitir a la IA ejecutar comandos, leer archivos y realizar acciones en servidores remotos mediante Function Calling.",
+      "tool_use_auto_approve_read": "Aprobar auto. herramientas de solo lectura",
+      "tool_use_auto_approve_read_hint": "Aprobar automáticamente read_file, list_directory, grep_search y git_status sin confirmación.",
+      "tool_use_auto_approve_all": "Aprobar auto. todas las herramientas (Peligroso)",
+      "tool_use_auto_approve_all_hint": "Aprobar automáticamente TODAS las herramientas incluyendo terminal_exec y write_file. La IA tendrá acceso completo de ejecución en el servidor remoto.",
+      "tool_use_auto_approve_all_warning": "Esto otorga a la IA capacidad de ejecución de comandos sin restricciones. Usar solo en servidores de confianza, no de producción."
     },
     "sftp": {
       "title": "Transferencias SFTP",
