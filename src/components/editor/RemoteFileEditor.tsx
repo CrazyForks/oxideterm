@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { EditorView, keymap, lineNumbers, highlightActiveLineGutter } from '@codemirror/view';
+import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, drawSelection, highlightActiveLine, highlightSpecialChars, dropCursor, crosshairCursor, rectangularSelection } from '@codemirror/view';
 import { EditorState, Extension } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import {
@@ -12,6 +12,7 @@ import {
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
 import { autocompletion, completionKeymap } from '@codemirror/autocomplete';
 import { oneDark } from '@codemirror/theme-one-dark';
+import { indentationMarkers } from '@replit/codemirror-indentation-markers';
 import { Save, X, AlertCircle, Check, Loader2, WifiOff, RefreshCw } from 'lucide-react';
 import { nodeSftpWrite } from '../../lib/api';
 import { useConfirm } from '../../hooks/useConfirm';
@@ -195,12 +196,21 @@ export function RemoteFileEditor({
 
       // 基础扩展
       const extensions: Extension[] = [
+        // 渲染增强
+        highlightSpecialChars(),
+        drawSelection({ cursorBlinkRate: 530 }),
+        dropCursor(),
+        rectangularSelection(),
+        crosshairCursor(),
+        highlightActiveLine(),
+        // 基础功能
         lineNumbers(),
         highlightActiveLineGutter(),
         history(),
         foldGutter(),
         indentOnInput(),
         bracketMatching(),
+        indentationMarkers(),
         autocompletion(),
         highlightSelectionMatches(),
         oneDark, // 暗色主题
@@ -213,6 +223,10 @@ export function RemoteFileEditor({
           '.cm-scroller': {
             fontFamily: '"JetBrains Mono", "Fira Code", "Menlo", monospace',
             overflow: 'auto',
+            WebkitFontSmoothing: 'antialiased',
+            MozOsxFontSmoothing: 'grayscale',
+            textRendering: 'optimizeLegibility',
+            fontFeatureSettings: '"liga" 1, "calt" 1',
           },
           '.cm-content': {
             minHeight: '100%',
@@ -229,6 +243,7 @@ export function RemoteFileEditor({
           },
           '&.cm-focused .cm-cursor': {
             borderLeftColor: '#f97316',
+            borderLeftWidth: '2px',
           },
           '&.cm-focused .cm-selectionBackground, ::selection': {
             backgroundColor: 'rgb(234 88 12 / 0.2)',

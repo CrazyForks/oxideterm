@@ -1,12 +1,13 @@
 // src/components/ide/hooks/useCodeMirrorEditor.ts
 import { useRef, useEffect, useCallback, useState } from 'react';
-import { EditorView, keymap, lineNumbers, highlightActiveLineGutter } from '@codemirror/view';
+import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, drawSelection, highlightActiveLine, highlightSpecialChars, dropCursor, crosshairCursor, rectangularSelection } from '@codemirror/view';
 import { EditorState, EditorSelection, Extension, Transaction, Compartment } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { indentOnInput, bracketMatching, foldGutter, foldKeymap } from '@codemirror/language';
 import { highlightSelectionMatches, search } from '@codemirror/search';
 import { autocompletion, completionKeymap, type CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
 import { oneDark } from '@codemirror/theme-one-dark';
+import { indentationMarkers } from '@replit/codemirror-indentation-markers';
 import { loadLanguage } from '../../../lib/codemirror/languageLoader';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { getFontFamily } from '../../../lib/fontFamily';
@@ -68,6 +69,10 @@ function buildOxideTheme(fontFamily: string, fontSize: number, lineHeight: numbe
       lineHeight: `${lineHeight}`,
       overflow: 'auto',
       backgroundColor: 'transparent !important',
+      WebkitFontSmoothing: 'antialiased',
+      MozOsxFontSmoothing: 'grayscale',
+      textRendering: 'optimizeLegibility',
+      fontFeatureSettings: '"liga" 1, "calt" 1',
     },
   '.cm-content': {
     minHeight: '100%',
@@ -89,9 +94,29 @@ function buildOxideTheme(fontFamily: string, fontSize: number, lineHeight: numbe
   },
   '&.cm-focused .cm-cursor': {
     borderLeftColor: 'var(--theme-accent)',
+    borderLeftWidth: '2px',
   },
   '&.cm-focused .cm-selectionBackground, ::selection': {
     backgroundColor: 'color-mix(in srgb, var(--theme-accent) 20%, transparent)',
+  },
+  // 自定义选区渲染（drawSelection 启用后）
+  '.cm-selectionLayer .cm-selectionBackground': {
+    backgroundColor: 'color-mix(in srgb, var(--theme-accent) 20%, transparent)',
+  },
+  '&.cm-focused .cm-selectionLayer .cm-selectionBackground': {
+    backgroundColor: 'color-mix(in srgb, var(--theme-accent) 25%, transparent)',
+  },
+  // 缩进参考线样式
+  '.cm-indentation-marker': {
+    opacity: '0.15',
+  },
+  '.cm-indentation-marker.active': {
+    opacity: '0.35',
+  },
+  // 特殊字符占位符
+  '.cm-specialChar': {
+    color: 'var(--theme-text-muted)',
+    opacity: '0.5',
   },
 
   // 搜索高亮 - 增加“线包边”视觉效果
@@ -270,12 +295,21 @@ export function useCodeMirrorEditor(options: UseCodeMirrorEditorOptions): UseCod
         : [];
 
       const extensions: Extension[] = [
+        // 渲染增强
+        highlightSpecialChars(),
+        drawSelection({ cursorBlinkRate: 530 }),
+        dropCursor(),
+        rectangularSelection(),
+        crosshairCursor(),
+        highlightActiveLine(),
+        // 基础功能
         lineNumbers(),
         highlightActiveLineGutter(),
         history(),
         foldGutter(),
         indentOnInput(),
         bracketMatching(),
+        indentationMarkers(),
         autocompletion({
           override: completionOverrides.length > 0 ? completionOverrides : undefined,
         }),

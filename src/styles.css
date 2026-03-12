@@ -1154,6 +1154,49 @@ html {
   background-color: color-mix(in srgb, var(--theme-accent) 40%, transparent) !important;
 }
 
+/* CodeMirror rendering quality enhancements */
+.cm-editor {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Smooth cursor blink animation */
+.cm-editor .cm-cursor {
+  transition: opacity 0.15s;
+}
+
+/* Match bracket highlight polish */
+.cm-editor .cm-matchingBracket {
+  color: var(--theme-accent) !important;
+  font-weight: 600;
+  outline: 1px solid color-mix(in srgb, var(--theme-accent) 30%, transparent);
+  outline-offset: -1px;
+  border-radius: 1px;
+}
+
+/* Fold gutter marker style */
+.cm-editor .cm-foldGutter .cm-gutterElement {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.cm-editor .cm-foldGutter:hover .cm-gutterElement,
+.cm-editor .cm-gutterElement:has(> span[title]) {
+  opacity: 0.6;
+}
+
+/* Indentation markers */
+.cm-editor .cm-indentation-marker {
+  --indent-marker-bg-part: var(--theme-text-muted);
+}
+
+/* Drop cursor style */
+.cm-editor .cm-dropCursor {
+  border-left-color: var(--theme-accent) !important;
+  border-left-width: 2px !important;
+}
+
 /* Topology SVG background rects */
 [data-bg-active] .topo-bg-fill {
   opacity: 0.15;
