@@ -214,10 +214,15 @@ function parseCompletion(text: string): { status: 'completed' | 'failed'; summar
   try {
     const parsed = JSON.parse(toParse);
     if (parsed.status && parsed.summary) {
+      // Ensure details is always a string — AI may return an object
+      const rawDetails = parsed.details;
+      const details = typeof rawDetails === 'string'
+        ? rawDetails
+        : (rawDetails && typeof rawDetails === 'object' ? JSON.stringify(rawDetails, null, 2) : '');
       return {
         status: parsed.status === 'failed' ? 'failed' : 'completed',
-        summary: parsed.summary,
-        details: parsed.details || '',
+        summary: typeof parsed.summary === 'string' ? parsed.summary : String(parsed.summary),
+        details,
       };
     }
   } catch { /* not a completion response */ }
@@ -487,6 +492,11 @@ export async function runAgent(task: AgentTask, signal: AbortSignal): Promise<vo
         messages.push(decisionMsg);
 
         if (completion) {
+          // Advance plan to final step so the indicator shows full progress
+          const currentPlan = store().activeTask?.plan;
+          if (currentPlan) {
+            store().setPlan({ ...currentPlan, currentStepIndex: currentPlan.steps.length });
+          }
           // Task is done
           store().setTaskSummary(completion.summary + (completion.details ? `\n\n${completion.details}` : ''));
           store().setTaskStatus(completion.status);
@@ -498,6 +508,8 @@ export async function runAgent(task: AgentTask, signal: AbortSignal): Promise<vo
         // Track consecutive empty rounds (no tool calls and no completion)
         emptyRoundCount++;
         if (emptyRoundCount >= MAX_EMPTY_ROUNDS) {
+          const p = store().activeTask?.plan;
+          if (p) store().setPlan({ ...p, currentStepIndex: p.steps.length });
           store().setTaskSummary('Agent stopped: no actionable response after multiple rounds.');
           store().setTaskStatus('completed');
           showToast('agent.toast.no_progress', 'warning');
@@ -677,6 +689,8 @@ export async function runAgent(task: AgentTask, signal: AbortSignal): Promise<vo
       // Context overflow protection
       const currentTokens = estimateTotalTokens(messages);
       if (currentTokens > contextWindow * CONTEXT_OVERFLOW_RATIO) {
+        const p = store().activeTask?.plan;
+        if (p) store().setPlan({ ...p, currentStepIndex: p.steps.length });
         store().setTaskSummary('Context window approaching limit. Task stopped to prevent errors.');
         store().setTaskStatus('completed');
         showToast('agent.toast.context_overflow', 'warning');
@@ -691,6 +705,8 @@ export async function runAgent(task: AgentTask, signal: AbortSignal): Promise<vo
     }
 
     // Max rounds reached
+    const p = store().activeTask?.plan;
+    if (p) store().setPlan({ ...p, currentStepIndex: p.steps.length });
     store().setTaskSummary('Maximum rounds reached. Task may be incomplete.');
     store().setTaskStatus('completed');
     showToast('agent.toast.max_rounds', 'warning');
