@@ -118,11 +118,23 @@ function App() {
 
   // Load agent task history from backend persistence
   useEffect(() => {
-    import('./store/agentStore').then(({ useAgentStore }) => {
-      useAgentStore.getState().initHistory();
-    }).catch((e) => {
-      console.warn('Failed to load agent history:', e);
-    });
+    (async () => {
+      try {
+        const { useAgentStore } = await import('./store/agentStore');
+        await useAgentStore.getState().initHistory();
+      } catch (e) {
+        console.warn('Failed to load agent history:', e);
+        try {
+          const { useToastStore } = await import('./hooks/useToast');
+          useToastStore.getState().addToast({
+            title: 'Agent history failed to load',
+            variant: 'warning',
+          });
+        } catch (toastErr) {
+          console.error('Failed to show agent history warning:', toastErr);
+        }
+      }
+    })();
   }, []);
 
   // Sync SFTP settings to backend on app startup

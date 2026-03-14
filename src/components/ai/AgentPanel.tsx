@@ -780,7 +780,7 @@ export const AgentPanel = () => {
   const handleStart = useCallback(
     (goal: string) => {
       if (!providerId || !model) return;
-      const contextTabType = useAppStore.getState().lastNonAgentTabType;
+      const contextTabType = useAppStore.getState().lastNonAgentTabType ?? 'terminal';
       const task = startTask(goal, providerId, model, contextTabType);
       // Get the abort controller from the store
       const controller = useAgentStore.getState().abortController;

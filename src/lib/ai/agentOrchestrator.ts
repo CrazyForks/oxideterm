@@ -360,14 +360,18 @@ export async function runAgent(task: AgentTask, signal: AbortSignal): Promise<vo
 
     // ── Build initial context ────────────────────────────────────────────
     const sessionsDesc = await getSessionsDescription();
-    const contextWindow = getModelContextWindow(task.model);
+    const contextWindow = getModelContextWindow(
+      task.model,
+      settings.ai.modelContextWindows,
+      task.providerId,
+    );
     const reserve = responseReserve(contextWindow);
 
     // ── Conversation history for LLM ─────────────────────────────────────
     const messages: ChatMessage[] = [];
 
     // ── Phase 1: Planning ────────────────────────────────────────────────
-    // Resolve terminal CWD via OSC 7 shell integration
+    // Snapshot CWD at task creation, so it won't drift if user switches panes
     const cwd = getActiveCwd();
 
     let systemPrompt = buildAgentSystemPrompt({
@@ -449,21 +453,29 @@ export async function runAgent(task: AgentTask, signal: AbortSignal): Promise<vo
     for (let round = 0; round < task.maxRounds; round++) {
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
-      // Wait if paused (with 30-minute safety timeout)
-      const pauseStart = Date.now();
-      const MAX_PAUSE_MS = 30 * 60 * 1000;
-      while (store().activeTask?.status === 'paused') {
-        if (Date.now() - pauseStart > MAX_PAUSE_MS) {
-          store().setTaskSummary('Task auto-cancelled: paused for over 30 minutes.');
-          store().setTaskStatus('cancelled');
-          showToast('agent.toast.pause_timeout', 'warning');
-          return;
+      // Wait if paused (with 30-minute safety timeout, decoupled from poll loop)
+      if (store().activeTask?.status === 'paused') {
+        const MAX_PAUSE_MS = 30 * 60 * 1000;
+        let pauseTimedOut = false;
+        const pauseTimer = setTimeout(() => { pauseTimedOut = true; }, MAX_PAUSE_MS);
+        try {
+          while (store().activeTask?.status === 'paused') {
+            if (pauseTimedOut) {
+              store().setTaskSummary('Task auto-cancelled: paused for over 30 minutes.');
+              store().setTaskStatus('cancelled');
+              showToast('agent.toast.pause_timeout', 'warning');
+              return;
+            }
+            await new Promise(r => setTimeout(r, 200));
+            if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+          }
+        } finally {
+          clearTimeout(pauseTimer);
         }
-        await new Promise(r => setTimeout(r, 200));
-        if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
       }
 
       store().incrementRound();
+      _cachedToolContext = null; // Invalidate per-round to pick up focus changes
 
       // Update system prompt with current round
       messages[0] = {

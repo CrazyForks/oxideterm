@@ -8,13 +8,26 @@ use std::sync::Arc;
 use tauri::State;
 
 /// Save an agent task to persistent storage.
-/// `task_id` is extracted from the JSON for indexing.
+/// Validates that the `task_id` matches the `id` field inside the JSON.
 #[tauri::command]
 pub async fn agent_history_save(
     task_id: String,
     task_json: String,
     store: State<'_, Arc<AgentHistoryStore>>,
 ) -> Result<(), String> {
+    // Validate task_id matches JSON content to prevent index/content mismatch
+    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&task_json) {
+        if let Some(json_id) = parsed.get("id").and_then(|v| v.as_str()) {
+            if json_id != task_id {
+                return Err(format!(
+                    "task_id '{}' does not match JSON id '{}'",
+                    task_id, json_id
+                ));
+            }
+        }
+    } else {
+        eprintln!("[agent_history_save] Warning: received non-JSON task data for id '{}'", task_id);
+    }
     store
         .save_task(&task_id, &task_json)
         .map_err(|e| format!("Failed to save agent task: {}", e))
