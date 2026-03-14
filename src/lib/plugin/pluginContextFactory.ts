@@ -20,9 +20,30 @@ import type {
   PluginAssetsAPI,
   PluginSftpAPI,
   PluginForwardAPI,
+  PluginSessionsAPI,
+  PluginTransfersAPI,
+  PluginProfilerAPI,
+  PluginEventLogAPI,
+  PluginIdeAPI,
+  PluginAiAPI,
+  PluginAppAPI,
   PluginFileInfo,
   PluginForwardRule,
   ConnectionSnapshot,
+  SessionTreeNodeSnapshot,
+  TransferSnapshot,
+  ProfilerMetricsSnapshot,
+  EventLogEntrySnapshot,
+  IdeFileSnapshot,
+  IdeProjectSnapshot,
+  AiConversationSnapshot,
+  AiMessageSnapshot,
+  ThemeSnapshot,
+  StatusBarItemOptions,
+  StatusBarHandle,
+  ContextMenuTarget,
+  ContextMenuItem,
+  ProgressReporter,
   Disposable,
   InputInterceptor,
   OutputProcessor,
@@ -37,6 +58,8 @@ import { pluginEventBridge } from './pluginEventBridge';
 import { createPluginSettingsManager } from './pluginSettingsManager';
 import { createPluginI18nManager } from './pluginI18nManager';
 import { toSnapshot } from './pluginUtils';
+import { freezeSnapshot } from './pluginSnapshots';
+import { createThrottledEmitter } from './pluginThrottledEvents';
 import {
   findPaneBySessionId,
   getTerminalBuffer,
@@ -44,6 +67,70 @@ import {
   writeToTerminal as registryWriteToTerminal,
 } from '../terminalRegistry';
 import { invoke } from '@tauri-apps/api/core';
+
+// Lazy store imports — loaded on first use to avoid circular deps
+let _useTransferStore: typeof import('../../store/transferStore').useTransferStore | null = null;
+let _useProfilerStore: typeof import('../../store/profilerStore').useProfilerStore | null = null;
+let _useEventLogStore: typeof import('../../store/eventLogStore').useEventLogStore | null = null;
+let _useIdeStore: typeof import('../../store/ideStore').useIdeStore | null = null;
+let _useAiChatStore: typeof import('../../store/aiChatStore').useAiChatStore | null = null;
+let _useSettingsStore: typeof import('../../store/settingsStore').useSettingsStore | null = null;
+
+async function getTransferStore() {
+  if (!_useTransferStore) {
+    const mod = await import('../../store/transferStore');
+    _useTransferStore = mod.useTransferStore;
+  }
+  return _useTransferStore;
+}
+async function getProfilerStore() {
+  if (!_useProfilerStore) {
+    const mod = await import('../../store/profilerStore');
+    _useProfilerStore = mod.useProfilerStore;
+  }
+  return _useProfilerStore;
+}
+async function getEventLogStore() {
+  if (!_useEventLogStore) {
+    const mod = await import('../../store/eventLogStore');
+    _useEventLogStore = mod.useEventLogStore;
+  }
+  return _useEventLogStore;
+}
+async function getIdeStore() {
+  if (!_useIdeStore) {
+    const mod = await import('../../store/ideStore');
+    _useIdeStore = mod.useIdeStore;
+  }
+  return _useIdeStore;
+}
+async function getAiChatStore() {
+  if (!_useAiChatStore) {
+    const mod = await import('../../store/aiChatStore');
+    _useAiChatStore = mod.useAiChatStore;
+  }
+  return _useAiChatStore;
+}
+async function getSettingsStore() {
+  if (!_useSettingsStore) {
+    const mod = await import('../../store/settingsStore');
+    _useSettingsStore = mod.useSettingsStore;
+  }
+  return _useSettingsStore;
+}
+
+// Pre-warm lazy stores on first context build (non-blocking)
+let storesWarmed = false;
+function warmStores() {
+  if (storesWarmed) return;
+  storesWarmed = true;
+  void getTransferStore();
+  void getProfilerStore();
+  void getEventLogStore();
+  void getIdeStore();
+  void getAiChatStore();
+  void getSettingsStore();
+}
 
 // ── Module-level asset URL tracking for cleanup ──────────────────────────
 const activeAssetUrls = new Map<string, Set<string>>();
@@ -112,6 +199,9 @@ export function buildPluginContext(manifest: PluginManifest): PluginContext {
   const storage = createPluginStorage(pluginId);
   const settingsManager = createPluginSettingsManager(pluginId, manifest);
   const i18nManager = createPluginI18nManager(pluginId);
+
+  // Pre-warm lazy store imports
+  warmStores();
 
   // ── ctx.connections ───────────────────────────────────────────────
   const connections: PluginConnectionsAPI = Object.freeze({
@@ -266,12 +356,99 @@ export function buildPluginContext(manifest: PluginManifest): PluginContext {
     },
     async showConfirm(opts) {
       return new Promise<boolean>((resolve) => {
-        // Emit to PluginConfirmDialog via event bridge; the component
-        // renders a themed Radix dialog and resolves the promise.
         pluginEventBridge.emit('plugin:confirm', {
           title: opts.title,
           description: opts.description,
           resolve,
+        });
+      });
+    },
+    // v3 UI extension methods
+    showNotification(opts: { title: string; body?: string; severity?: 'info' | 'warning' | 'error' }) {
+      pluginEventBridge.emit('plugin:toast', {
+        message: opts.title,
+        description: opts.body,
+        variant: opts.severity === 'error' ? 'destructive' : opts.severity === 'warning' ? 'warning' : 'default',
+      });
+    },
+    showProgress(title: string): ProgressReporter {
+      let _progress = 0;
+      let _disposed = false;
+      const id = crypto.randomUUID();
+      pluginEventBridge.emit('plugin:progress:start', { id, title, pluginId });
+      return Object.freeze({
+        report(increment: number, message?: string) {
+          if (_disposed) return;
+          _progress = Math.min(100, _progress + increment);
+          pluginEventBridge.emit('plugin:progress:update', { id, progress: _progress, message });
+        },
+        done() {
+          if (_disposed) return;
+          _disposed = true;
+          pluginEventBridge.emit('plugin:progress:end', { id });
+        },
+      });
+    },
+    getLayout() {
+      const state = useAppStore.getState();
+      return Object.freeze({
+        sidebarCollapsed: state.sidebarCollapsed ?? false,
+        activeTabId: state.activeTabId ?? null,
+        tabCount: state.tabs?.length ?? 0,
+      });
+    },
+    onLayoutChange(handler) {
+      const unsub = useAppStore.subscribe(
+        (state) => ({ sidebarCollapsed: state.sidebarCollapsed, activeTabId: state.activeTabId, tabLen: state.tabs?.length }),
+        () => {
+          try { handler(ui.getLayout()); } catch { /* swallow */ }
+        },
+      );
+      return createDisposable(pluginId, unsub);
+    },
+    registerContextMenu(target: ContextMenuTarget, items: ContextMenuItem[]) {
+      const key = `${pluginId}:${target}:${crypto.randomUUID()}`;
+      usePluginStore.setState((state) => ({
+        contextMenuItems: new Map(state.contextMenuItems ?? new Map()).set(key, { pluginId, target, items }),
+      }));
+      return createDisposable(pluginId, () => {
+        usePluginStore.setState((state) => {
+          const m = new Map(state.contextMenuItems ?? new Map());
+          m.delete(key);
+          return { contextMenuItems: m };
+        });
+      });
+    },
+    registerStatusBarItem(options: StatusBarItemOptions): StatusBarHandle {
+      const id = `${pluginId}:${options.id ?? crypto.randomUUID()}`;
+      const updateBar = (opts: StatusBarItemOptions) => {
+        usePluginStore.setState((state) => ({
+          statusBarItems: new Map(state.statusBarItems ?? new Map()).set(id, { pluginId, ...opts }),
+        }));
+      };
+      updateBar(options);
+      const disposable = createDisposable(pluginId, () => {
+        usePluginStore.setState((state) => {
+          const m = new Map(state.statusBarItems ?? new Map());
+          m.delete(id);
+          return { statusBarItems: m };
+        });
+      });
+      return Object.freeze({
+        update(newOpts: Partial<StatusBarItemOptions>) { updateBar({ ...options, ...newOpts }); },
+        dispose: disposable.dispose,
+      });
+    },
+    registerKeybinding(keybinding: string, handler: () => void) {
+      const key = `${pluginId}:${keybinding}`;
+      usePluginStore.setState((state) => ({
+        keybindings: new Map(state.keybindings ?? new Map()).set(key, { pluginId, keybinding, handler }),
+      }));
+      return createDisposable(pluginId, () => {
+        usePluginStore.setState((state) => {
+          const m = new Map(state.keybindings ?? new Map());
+          m.delete(key);
+          return { keybindings: m };
         });
       });
     },
@@ -346,6 +523,33 @@ export function buildPluginContext(manifest: PluginManifest): PluginContext {
       const paneId = findPaneBySessionId(sessionId);
       if (!paneId) return null;
       return getTerminalSelection(paneId) ?? null;
+    },
+    // v3 terminal search & buffer methods
+    async search(nodeId: string, query: string, options?: { caseSensitive?: boolean; regex?: boolean; wholeWord?: boolean }) {
+      const sessionId = resolveNodeToFirstSession(nodeId);
+      if (!sessionId) return Object.freeze({ matches: [], total_matches: 0 });
+      const result = await invoke<{ matches: unknown[]; total_matches: number; duration_ms: number }>('search_terminal', {
+        sessionId,
+        options: { query, case_sensitive: options?.caseSensitive ?? false, regex: options?.regex ?? false, whole_word: options?.wholeWord ?? false },
+      });
+      return Object.freeze({ matches: Object.freeze(result.matches), total_matches: result.total_matches });
+    },
+    async getScrollBuffer(nodeId: string, startLine: number, count: number) {
+      const sessionId = resolveNodeToFirstSession(nodeId);
+      if (!sessionId) return Object.freeze([]);
+      const lines = await invoke<{ text: string; line_number: number }[]>('get_scroll_buffer', { sessionId, startLine, count });
+      return Object.freeze(lines.map((l) => Object.freeze({ text: l.text, lineNumber: l.line_number })));
+    },
+    async getBufferSize(nodeId: string) {
+      const sessionId = resolveNodeToFirstSession(nodeId);
+      if (!sessionId) return Object.freeze({ currentLines: 0, totalLines: 0, maxLines: 0 });
+      const stats = await invoke<{ current_lines: number; total_lines: number; max_lines: number; memory_usage_mb: number }>('get_buffer_stats', { sessionId });
+      return Object.freeze({ currentLines: stats.current_lines, totalLines: stats.total_lines, maxLines: stats.max_lines });
+    },
+    async clearBuffer(nodeId: string) {
+      const sessionId = resolveNodeToFirstSession(nodeId);
+      if (!sessionId) return;
+      await invoke('clear_buffer', { sessionId });
     },
   });
 
@@ -545,6 +749,517 @@ export function buildPluginContext(manifest: PluginManifest): PluginContext {
     },
   });
 
+  // ── ctx.sessions (v3) ──────────────────────────────────────────────
+  //
+  // Read-only session tree access. Data is snapshots frozen on read.
+  //
+  const sessions: PluginSessionsAPI = Object.freeze({
+    getTree(): ReadonlyArray<SessionTreeNodeSnapshot> {
+      const nodes = useSessionTreeStore.getState().nodes;
+      const connections = useAppStore.getState().connections;
+      return Object.freeze(nodes.map((n) => {
+        const conn = n.runtime.connectionId ? connections.get(n.runtime.connectionId) : undefined;
+        return freezeSnapshot<SessionTreeNodeSnapshot>({
+          id: n.id,
+          label: n.label,
+          host: n.host,
+          port: n.port,
+          username: n.username,
+          parentId: n.parentId,
+          childIds: Object.freeze([...n.childIds]),
+          connectionState: n.runtime.status,
+          connectionId: n.runtime.connectionId,
+          terminalIds: Object.freeze([...n.runtime.terminalIds]),
+          sftpSessionId: n.runtime.sftpSessionId,
+          errorMessage: n.runtime.errorMessage,
+        });
+      }));
+    },
+    getActiveNodes() {
+      const nodes = useSessionTreeStore.getState().nodes;
+      return Object.freeze(
+        nodes
+          .filter((n) => n.runtime.status === 'active' || n.runtime.status === 'connected')
+          .map((n) => Object.freeze({
+            nodeId: n.id,
+            sessionId: n.runtime.terminalIds[0] ?? null,
+            connectionState: n.runtime.status,
+          })),
+      );
+    },
+    getNodeState(nodeId: string): string | null {
+      const node = useSessionTreeStore.getState().getNode(nodeId);
+      return node ? node.runtime.status : null;
+    },
+    onTreeChange(handler) {
+      const unsub = useSessionTreeStore.subscribe(
+        (state) => state.nodes,
+        () => {
+          try { handler(sessions.getTree()); } catch { /* swallow */ }
+        },
+      );
+      return createDisposable(pluginId, unsub);
+    },
+    onNodeStateChange(nodeId: string, handler) {
+      let prevStatus: string | null = null;
+      const unsub = useSessionTreeStore.subscribe(
+        (state) => state.getNode(nodeId)?.runtime.status ?? null,
+        (status) => {
+          if (status !== prevStatus) {
+            prevStatus = status;
+            try { handler(status ?? 'idle'); } catch { /* swallow */ }
+          }
+        },
+      );
+      return createDisposable(pluginId, unsub);
+    },
+  });
+
+  // ── ctx.transfers (v3) ────────────────────────────────────────────
+  //
+  // SFTP transfer monitoring with throttled progress events.
+  //
+  function toTransferSnapshot(t: { id: string; nodeId: string; name: string; localPath: string; remotePath: string; direction: string; size: number; transferred: number; state: string; error?: string; startTime: number; endTime?: number }): TransferSnapshot {
+    return freezeSnapshot<TransferSnapshot>({
+      id: t.id,
+      nodeId: t.nodeId,
+      name: t.name,
+      localPath: t.localPath,
+      remotePath: t.remotePath,
+      direction: t.direction as 'upload' | 'download',
+      size: t.size,
+      transferred: t.transferred,
+      state: t.state as TransferSnapshot['state'],
+      error: t.error,
+      startTime: t.startTime,
+      endTime: t.endTime,
+    });
+  }
+
+  const transfers: PluginTransfersAPI = Object.freeze({
+    getAll(): ReadonlyArray<TransferSnapshot> {
+      if (!_useTransferStore) return Object.freeze([]);
+      const items = _useTransferStore.getState().transfers;
+      return Object.freeze(Array.from(items.values()).map(toTransferSnapshot));
+    },
+    getByNode(nodeId: string): ReadonlyArray<TransferSnapshot> {
+      if (!_useTransferStore) return Object.freeze([]);
+      const items = _useTransferStore.getState().transfers;
+      return Object.freeze(
+        Array.from(items.values())
+          .filter((t) => t.nodeId === nodeId)
+          .map(toTransferSnapshot),
+      );
+    },
+    onProgress(handler) {
+      const throttled = createThrottledEmitter<TransferSnapshot>(500, handler);
+      let unsub: (() => void) | null = null;
+      void getTransferStore().then((store) => {
+        unsub = store.subscribe(
+          (state) => state.transfers,
+          (transfers) => {
+            for (const t of transfers.values()) {
+              if (t.state === 'active') throttled.push(toTransferSnapshot(t));
+            }
+          },
+        );
+      });
+      return createDisposable(pluginId, () => { unsub?.(); throttled.dispose(); });
+    },
+    onComplete(handler) {
+      let unsub: (() => void) | null = null;
+      let prevStates = new Map<string, string>();
+      void getTransferStore().then((store) => {
+        prevStates = new Map(Array.from(store.getState().transfers.entries()).map(([k, v]) => [k, v.state]));
+        unsub = store.subscribe(
+          (state) => state.transfers,
+          (transfers) => {
+            for (const [id, t] of transfers) {
+              if (t.state === 'completed' && prevStates.get(id) !== 'completed') {
+                try { handler(toTransferSnapshot(t)); } catch { /* swallow */ }
+              }
+            }
+            prevStates = new Map(Array.from(transfers.entries()).map(([k, v]) => [k, v.state]));
+          },
+        );
+      });
+      return createDisposable(pluginId, () => { unsub?.(); });
+    },
+    onError(handler) {
+      let unsub: (() => void) | null = null;
+      let prevStates = new Map<string, string>();
+      void getTransferStore().then((store) => {
+        prevStates = new Map(Array.from(store.getState().transfers.entries()).map(([k, v]) => [k, v.state]));
+        unsub = store.subscribe(
+          (state) => state.transfers,
+          (transfers) => {
+            for (const [id, t] of transfers) {
+              if (t.state === 'error' && prevStates.get(id) !== 'error') {
+                try { handler(toTransferSnapshot(t)); } catch { /* swallow */ }
+              }
+            }
+            prevStates = new Map(Array.from(transfers.entries()).map(([k, v]) => [k, v.state]));
+          },
+        );
+      });
+      return createDisposable(pluginId, () => { unsub?.(); });
+    },
+  });
+
+  // ── ctx.profiler (v3) ─────────────────────────────────────────────
+  //
+  // Resource monitoring with throttled metrics push.
+  //
+  function toMetricsSnapshot(m: { timestampMs: number; cpuPercent: number | null; memoryUsed: number | null; memoryTotal: number | null; memoryPercent: number | null; loadAvg1: number | null; loadAvg5: number | null; loadAvg15: number | null; cpuCores: number | null; netRxBytesPerSec: number | null; netTxBytesPerSec: number | null; sshRttMs: number | null }): ProfilerMetricsSnapshot {
+    return freezeSnapshot<ProfilerMetricsSnapshot>({
+      timestampMs: m.timestampMs,
+      cpuPercent: m.cpuPercent,
+      memoryUsed: m.memoryUsed,
+      memoryTotal: m.memoryTotal,
+      memoryPercent: m.memoryPercent,
+      loadAvg1: m.loadAvg1,
+      loadAvg5: m.loadAvg5,
+      loadAvg15: m.loadAvg15,
+      cpuCores: m.cpuCores,
+      netRxBytesPerSec: m.netRxBytesPerSec,
+      netTxBytesPerSec: m.netTxBytesPerSec,
+      sshRttMs: m.sshRttMs,
+    });
+  }
+
+  const profiler: PluginProfilerAPI = Object.freeze({
+    getMetrics(nodeId: string): ProfilerMetricsSnapshot | null {
+      if (!_useProfilerStore) return null;
+      const connState = _useProfilerStore.getState().connections.get(nodeId);
+      return connState?.metrics ? toMetricsSnapshot(connState.metrics) : null;
+    },
+    getHistory(nodeId: string, maxPoints?: number): ReadonlyArray<ProfilerMetricsSnapshot> {
+      if (!_useProfilerStore) return Object.freeze([]);
+      const connState = _useProfilerStore.getState().connections.get(nodeId);
+      if (!connState) return Object.freeze([]);
+      const history = maxPoints ? connState.history.slice(-maxPoints) : connState.history;
+      return Object.freeze(history.map(toMetricsSnapshot));
+    },
+    isRunning(nodeId: string): boolean {
+      if (!_useProfilerStore) return false;
+      const connState = _useProfilerStore.getState().connections.get(nodeId);
+      return connState?.isRunning ?? false;
+    },
+    onMetrics(nodeId: string, handler) {
+      const throttled = createThrottledEmitter<ProfilerMetricsSnapshot>(1000, handler);
+      let unsub: (() => void) | null = null;
+      void getProfilerStore().then((store) => {
+        unsub = store.subscribe(
+          (state) => state.connections.get(nodeId)?.metrics ?? null,
+          (metrics) => {
+            if (metrics) throttled.push(toMetricsSnapshot(metrics));
+          },
+        );
+      });
+      return createDisposable(pluginId, () => { unsub?.(); throttled.dispose(); });
+    },
+  });
+
+  // ── ctx.eventLog (v3) ─────────────────────────────────────────────
+  //
+  // Read-only event log access.
+  //
+  function toEventLogSnapshot(e: { id: number; timestamp: number; severity: string; category: string; nodeId?: string; connectionId?: string; title: string; detail?: string; source: string }): EventLogEntrySnapshot {
+    return freezeSnapshot<EventLogEntrySnapshot>({
+      id: e.id,
+      timestamp: e.timestamp,
+      severity: e.severity as EventLogEntrySnapshot['severity'],
+      category: e.category as EventLogEntrySnapshot['category'],
+      nodeId: e.nodeId,
+      connectionId: e.connectionId,
+      title: e.title,
+      detail: e.detail,
+      source: e.source,
+    });
+  }
+
+  const eventLog: PluginEventLogAPI = Object.freeze({
+    getEntries(filter?) {
+      if (!_useEventLogStore) return Object.freeze([]);
+      let entries = _useEventLogStore.getState().entries;
+      if (filter?.severity) entries = entries.filter((e) => e.severity === filter.severity);
+      if (filter?.category) entries = entries.filter((e) => e.category === filter.category);
+      return Object.freeze(entries.map(toEventLogSnapshot));
+    },
+    onEntry(handler) {
+      let unsub: (() => void) | null = null;
+      let prevLength = 0;
+      void getEventLogStore().then((store) => {
+        prevLength = store.getState().entries.length;
+        unsub = store.subscribe(
+          (state) => state.entries,
+          (entries) => {
+            if (entries.length > prevLength) {
+              for (let i = prevLength; i < entries.length; i++) {
+                try { handler(toEventLogSnapshot(entries[i])); } catch { /* swallow */ }
+              }
+            }
+            prevLength = entries.length;
+          },
+        );
+      });
+      return createDisposable(pluginId, () => { unsub?.(); });
+    },
+  });
+
+  // ── ctx.ide (v3) ──────────────────────────────────────────────────
+  //
+  // Read-only IDE mode access.
+  //
+  function toIdeFileSnapshot(tab: { path: string; name: string; language: string; isDirty: boolean; isPinned: boolean }, isActive: boolean): IdeFileSnapshot {
+    return freezeSnapshot<IdeFileSnapshot>({
+      path: tab.path,
+      name: tab.name,
+      language: tab.language,
+      isDirty: tab.isDirty,
+      isActive,
+      isPinned: tab.isPinned,
+    });
+  }
+
+  const ide: PluginIdeAPI = Object.freeze({
+    isOpen(): boolean {
+      return _useIdeStore ? _useIdeStore.getState().nodeId !== null : false;
+    },
+    getProject(): IdeProjectSnapshot | null {
+      if (!_useIdeStore) return null;
+      const state = _useIdeStore.getState();
+      if (!state.project || !state.nodeId) return null;
+      return freezeSnapshot<IdeProjectSnapshot>({
+        nodeId: state.nodeId,
+        rootPath: state.project.rootPath,
+        name: state.project.name,
+        isGitRepo: state.project.isGitRepo,
+        gitBranch: state.project.gitBranch,
+      });
+    },
+    getOpenFiles(): ReadonlyArray<IdeFileSnapshot> {
+      if (!_useIdeStore) return Object.freeze([]);
+      const state = _useIdeStore.getState();
+      return Object.freeze(
+        state.tabs.map((tab) => toIdeFileSnapshot(tab, tab.id === state.activeTabId)),
+      );
+    },
+    getActiveFile(): IdeFileSnapshot | null {
+      if (!_useIdeStore) return null;
+      const state = _useIdeStore.getState();
+      const tab = state.tabs.find((t) => t.id === state.activeTabId);
+      return tab ? toIdeFileSnapshot(tab, true) : null;
+    },
+    onFileOpen(handler) {
+      let unsub: (() => void) | null = null;
+      let prevTabIds = new Set<string>();
+      void getIdeStore().then((store) => {
+        prevTabIds = new Set(store.getState().tabs.map((t) => t.id));
+        unsub = store.subscribe(
+          (state) => state.tabs,
+          (tabs) => {
+            const activeId = _useIdeStore?.getState().activeTabId ?? null;
+            for (const tab of tabs) {
+              if (!prevTabIds.has(tab.id)) {
+                try { handler(toIdeFileSnapshot(tab, tab.id === activeId)); } catch { /* swallow */ }
+              }
+            }
+            prevTabIds = new Set(tabs.map((t) => t.id));
+          },
+        );
+      });
+      return createDisposable(pluginId, () => { unsub?.(); });
+    },
+    onFileClose(handler) {
+      let unsub: (() => void) | null = null;
+      let prevTabIds = new Set<string>();
+      let prevTabPaths = new Map<string, string>();
+      void getIdeStore().then((store) => {
+        const tabs = store.getState().tabs;
+        prevTabIds = new Set(tabs.map((t) => t.id));
+        prevTabPaths = new Map(tabs.map((t) => [t.id, t.path]));
+        unsub = store.subscribe(
+          (state) => state.tabs,
+          (tabs) => {
+            const currentIds = new Set(tabs.map((t) => t.id));
+            for (const id of prevTabIds) {
+              if (!currentIds.has(id)) {
+                const path = prevTabPaths.get(id);
+                if (path) { try { handler(path); } catch { /* swallow */ } }
+              }
+            }
+            prevTabIds = currentIds;
+            prevTabPaths = new Map(tabs.map((t) => [t.id, t.path]));
+          },
+        );
+      });
+      return createDisposable(pluginId, () => { unsub?.(); });
+    },
+    onActiveFileChange(handler) {
+      let unsub: (() => void) | null = null;
+      void getIdeStore().then((store) => {
+        unsub = store.subscribe(
+          (state) => state.activeTabId,
+          () => {
+            const state = _useIdeStore?.getState();
+            if (!state) return;
+            const tab = state.tabs.find((t) => t.id === state.activeTabId);
+            try { handler(tab ? toIdeFileSnapshot(tab, true) : null); } catch { /* swallow */ }
+          },
+        );
+      });
+      return createDisposable(pluginId, () => { unsub?.(); });
+    },
+  });
+
+  // ── ctx.ai (v3) ───────────────────────────────────────────────────
+  //
+  // Read-only AI chat access. Message content is provided as-is but
+  // plugins should treat terminal buffer context as sensitive data.
+  //
+  const ai: PluginAiAPI = Object.freeze({
+    getConversations(): ReadonlyArray<AiConversationSnapshot> {
+      if (!_useAiChatStore) return Object.freeze([]);
+      const conversations = _useAiChatStore.getState().conversations;
+      return Object.freeze(conversations.map((c) => freezeSnapshot<AiConversationSnapshot>({
+        id: c.id,
+        title: c.title,
+        messageCount: c.messages.length,
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt,
+      })));
+    },
+    getMessages(conversationId: string): ReadonlyArray<AiMessageSnapshot> {
+      if (!_useAiChatStore) return Object.freeze([]);
+      const conv = _useAiChatStore.getState().conversations.find((c) => c.id === conversationId);
+      if (!conv) return Object.freeze([]);
+      return Object.freeze(conv.messages.map((m) => freezeSnapshot<AiMessageSnapshot>({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        timestamp: m.timestamp,
+      })));
+    },
+    getActiveProvider(): Readonly<{ type: string; displayName: string }> | null {
+      if (!_useSettingsStore) return null;
+      const settings = _useSettingsStore.getState();
+      const providerId = settings.ai.activeProviderId;
+      if (!providerId) return null;
+      const provider = settings.ai.providers?.find((p: { id: string; type: string; name: string }) => p.id === providerId);
+      if (!provider) return null;
+      return Object.freeze({ type: provider.type, displayName: provider.name });
+    },
+    getAvailableModels(): ReadonlyArray<string> {
+      if (!_useSettingsStore) return Object.freeze([]);
+      const settings = _useSettingsStore.getState();
+      const providerId = settings.ai.activeProviderId;
+      if (!providerId || !settings.ai.modelContextWindows) return Object.freeze([]);
+      const models = settings.ai.modelContextWindows[providerId];
+      return models ? Object.freeze(Object.keys(models)) : Object.freeze([]);
+    },
+    onMessage(handler) {
+      let unsub: (() => void) | null = null;
+      let prevMessageCounts = new Map<string, number>();
+      void getAiChatStore().then((store) => {
+        prevMessageCounts = new Map(store.getState().conversations.map((c) => [c.id, c.messages.length]));
+        unsub = store.subscribe(
+          (state) => state.conversations,
+          (conversations) => {
+            for (const conv of conversations) {
+              const prevCount = prevMessageCounts.get(conv.id) ?? 0;
+              if (conv.messages.length > prevCount) {
+                const newMsg = conv.messages[conv.messages.length - 1];
+                try {
+                  handler(Object.freeze({
+                    conversationId: conv.id,
+                    messageId: newMsg.id,
+                    role: newMsg.role,
+                  }));
+                } catch { /* swallow */ }
+              }
+            }
+            prevMessageCounts = new Map(conversations.map((c) => [c.id, c.messages.length]));
+          },
+        );
+      });
+      return createDisposable(pluginId, () => { unsub?.(); });
+    },
+  });
+
+  // ── ctx.app (v3) ──────────────────────────────────────────────────
+  //
+  // Application-level read-only information.
+  //
+  const app: PluginAppAPI = Object.freeze({
+    getTheme(): ThemeSnapshot {
+      if (!_useSettingsStore) return Object.freeze({ name: 'default', isDark: true });
+      const terminal = _useSettingsStore.getState().terminal;
+      const theme = terminal?.theme ?? 'default';
+      // Dark detection: themes without "light" in name are assumed dark
+      return Object.freeze({ name: theme, isDark: !theme.toLowerCase().includes('light') });
+    },
+    getSettings(category: 'terminal' | 'appearance' | 'general' | 'buffer' | 'sftp' | 'reconnect'): Readonly<Record<string, unknown>> {
+      if (!_useSettingsStore) return Object.freeze({});
+      const state = _useSettingsStore.getState();
+      const section = state[category];
+      return section ? freezeSnapshot({ ...section } as Record<string, unknown>) : Object.freeze({});
+    },
+    getVersion(): string {
+      return window.__OXIDE__?.version ?? '0.0.0';
+    },
+    getPlatform(): 'macos' | 'windows' | 'linux' {
+      const ua = navigator.userAgent.toLowerCase();
+      if (ua.includes('mac')) return 'macos';
+      if (ua.includes('win')) return 'windows';
+      return 'linux';
+    },
+    getLocale(): string {
+      if (!_useSettingsStore) return 'en';
+      return _useSettingsStore.getState().general?.language ?? 'en';
+    },
+    onThemeChange(handler) {
+      let unsub: (() => void) | null = null;
+      void getSettingsStore().then((store) => {
+        unsub = store.subscribe(
+          (state) => state.terminal?.theme,
+          (theme) => {
+            if (theme) {
+              try { handler(Object.freeze({ name: theme, isDark: !theme.toLowerCase().includes('light') })); } catch { /* swallow */ }
+            }
+          },
+        );
+      });
+      return createDisposable(pluginId, () => { unsub?.(); });
+    },
+    onSettingsChange(category, handler) {
+      let unsub: (() => void) | null = null;
+      void getSettingsStore().then((store) => {
+        unsub = store.subscribe(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (state) => (state as any)[category],
+          (section) => {
+            if (section) {
+              try { handler(freezeSnapshot({ ...section } as Record<string, unknown>)); } catch { /* swallow */ }
+            }
+          },
+        );
+      });
+      return createDisposable(pluginId, () => { unsub?.(); });
+    },
+    async getPoolStats() {
+      try {
+        const stats = await invoke<{ active_connections: number; total_sessions: number }>('ssh_get_pool_stats');
+        return Object.freeze({
+          activeConnections: stats.active_connections,
+          totalSessions: stats.total_sessions,
+        });
+      } catch {
+        return Object.freeze({ activeConnections: 0, totalSessions: 0 });
+      }
+    },
+  });
+
   // ── Build final frozen context ────────────────────────────────────
   return Object.freeze({
     pluginId,
@@ -559,5 +1274,13 @@ export function buildPluginContext(manifest: PluginManifest): PluginContext {
     assets,
     sftp,
     forward,
+    // v3 namespaces
+    sessions,
+    transfers,
+    profiler,
+    eventLog,
+    ide,
+    ai,
+    app,
   });
 }

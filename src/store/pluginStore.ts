@@ -87,6 +87,12 @@ interface PluginStore {
   shortcuts: Map<string, ShortcutEntry>;
   /** Plugin commands for command palette: key = "pluginId:commandId" */
   commands: Map<string, PluginCommandEntry>;
+  /** Context menu items: key = "pluginId:target:uuid" */
+  contextMenuItems: Map<string, { pluginId: string; target: string; items: { label: string; handler: () => void; icon?: string }[] }>;
+  /** Status bar items: key = "pluginId:itemId" */
+  statusBarItems: Map<string, { pluginId: string; text: string; tooltip?: string; icon?: string; onClick?: () => void; priority?: number; alignment?: 'left' | 'right' }>;
+  /** Global keybindings: key = "pluginId:keybinding" */
+  keybindings: Map<string, { pluginId: string; keybinding: string; handler: () => void }>;
   /** Disposables per plugin: key = pluginId */
   disposables: Map<string, Disposable[]>;
 
@@ -182,6 +188,9 @@ export const usePluginStore = create<PluginStore>((set, get) => ({
   outputProcessors: [],
   shortcuts: new Map(),
   commands: new Map(),
+  contextMenuItems: new Map(),
+  statusBarItems: new Map(),
+  keybindings: new Map(),
   disposables: new Map(),
   registryEntries: [],
   installProgress: new Map(),
@@ -331,10 +340,25 @@ export const usePluginStore = create<PluginStore>((set, get) => ({
         if (entry.pluginId === pluginId) commands.delete(key);
       }
 
+      const contextMenuItems = new Map(prev.contextMenuItems);
+      for (const [key, entry] of contextMenuItems) {
+        if (entry.pluginId === pluginId) contextMenuItems.delete(key);
+      }
+
+      const statusBarItems = new Map(prev.statusBarItems);
+      for (const [key, entry] of statusBarItems) {
+        if (entry.pluginId === pluginId) statusBarItems.delete(key);
+      }
+
+      const keybindings = new Map(prev.keybindings);
+      for (const [key, entry] of keybindings) {
+        if (entry.pluginId === pluginId) keybindings.delete(key);
+      }
+
       const disposables = new Map(prev.disposables);
       disposables.delete(pluginId);
 
-      return { tabViews, sidebarPanels, inputInterceptors, outputProcessors, shortcuts, commands, disposables };
+      return { tabViews, sidebarPanels, inputInterceptors, outputProcessors, shortcuts, commands, contextMenuItems, statusBarItems, keybindings, disposables };
     });
   },
 

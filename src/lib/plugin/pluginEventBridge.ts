@@ -213,3 +213,37 @@ export async function setupNodeStateBridge(): Promise<() => void> {
     nodeGeneration.clear();
   };
 }
+
+/**
+ * v3: Wire transfer completion events → plugin events.
+ * Emits 'transfer:complete' and 'transfer:error'.
+ * Call once at app startup. Returns a cleanup function.
+ */
+export function setupTransferBridge(): () => void {
+  let unsub: (() => void) | null = null;
+  let prevStates = new Map<string, string>();
+
+  void import('../../store/transferStore').then(({ useTransferStore }) => {
+    prevStates = new Map(
+      Array.from(useTransferStore.getState().transfers.entries()).map(([k, v]) => [k, v.state]),
+    );
+    unsub = useTransferStore.subscribe(
+      (state) => state.transfers,
+      (transfers) => {
+        for (const [id, t] of transfers) {
+          const prev = prevStates.get(id);
+          if (t.state === 'completed' && prev !== 'completed') {
+            pluginEventBridge.emit('transfer:complete', { id: t.id, nodeId: t.nodeId, name: t.name, direction: t.direction });
+          } else if (t.state === 'error' && prev !== 'error') {
+            pluginEventBridge.emit('transfer:error', { id: t.id, nodeId: t.nodeId, name: t.name, error: t.error });
+          }
+        }
+        prevStates = new Map(Array.from(transfers.entries()).map(([k, v]) => [k, v.state]));
+      },
+    );
+  }).catch((err) => {
+    console.error('[PluginEventBridge] Failed to setup transfer bridge:', err);
+  });
+
+  return () => { unsub?.(); };
+}

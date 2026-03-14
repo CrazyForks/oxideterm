@@ -15,7 +15,7 @@ import { useAppShortcuts, ShortcutDefinition, isTerminalReservedKey } from './ho
 import { useSplitPaneShortcuts } from './hooks/useSplitPaneShortcuts';
 import { preloadTerminalFonts } from './lib/fontLoader';
 import { initializePluginSystem } from './lib/plugin/pluginLoader';
-import { setupConnectionBridge, setupNodeStateBridge, pluginEventBridge } from './lib/plugin/pluginEventBridge';
+import { setupConnectionBridge, setupNodeStateBridge, setupTransferBridge, pluginEventBridge } from './lib/plugin/pluginEventBridge';
 import { useToastStore } from './hooks/useToast';
 import { useUpdateStore } from './store/updateStore';
 import { PluginConfirmDialog } from './components/plugin/PluginConfirmDialog';
@@ -82,6 +82,7 @@ function App() {
   // Initialize plugin system (discover + load enabled plugins)
   useEffect(() => {
     const bridgeCleanup = setupConnectionBridge(useAppStore);
+    const transferBridgeCleanup = setupTransferBridge();
     let nodeStateBridgeCleanup: (() => void) | undefined;
     let nodeStateBridgeResolved = false;
 
@@ -106,6 +107,7 @@ function App() {
     });
     return () => {
       bridgeCleanup();
+      transferBridgeCleanup();
       if (nodeStateBridgeResolved) {
         nodeStateBridgeCleanup?.();
       } else {

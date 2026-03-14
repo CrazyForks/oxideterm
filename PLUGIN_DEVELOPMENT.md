@@ -1,7 +1,7 @@
 # OxideTerm Plugin Development Guide
 
-> **版本**: 适用于 OxideTerm v1.6.2+
-> **最后更新**: 2026-02-08
+> **版本**: 适用于 OxideTerm v1.6.2+（Plugin API v3 — 2026-03-15 更新）
+> **最后更新**: 2026-03-15
 
 ---
 
@@ -50,6 +50,13 @@
   - [6.10 ctx.assets](#610-ctxassets)
   - [6.11 ctx.sftp](#611-ctxsftp)
   - [6.12 ctx.forward](#612-ctxforward)
+  - [6.13 ctx.sessions (v3)](#613-ctxsessions-v3)
+  - [6.14 ctx.transfers (v3)](#614-ctxtransfers-v3)
+  - [6.15 ctx.profiler (v3)](#615-ctxprofiler-v3)
+  - [6.16 ctx.eventLog (v3)](#616-ctxeventlog-v3)
+  - [6.17 ctx.ide (v3)](#617-ctxide-v3)
+  - [6.18 ctx.ai (v3)](#618-ctxai-v3)
+  - [6.19 ctx.app (v3)](#619-ctxapp-v3)
 - [7. 共享模块 (window.\_\_OXIDE\_\_)](#7-共享模块-window__oxide__)
   - [7.1 可用模块](#71-可用模块)
   - [7.2 使用 React](#72-使用-react)
@@ -152,6 +159,9 @@ OxideTerm 插件系统遵循以下设计原则：
 │              │    ctx.connections  ctx.events  ctx.ui         │   │
 │              │    ctx.terminal    ctx.settings  ctx.i18n      │   │
 │              │    ctx.storage     ctx.api      ctx.assets     │   │
+│              │    ctx.sftp  ctx.forward                       │   │
+│              │    ctx.sessions  ctx.transfers  ctx.profiler   │   │
+│              │    ctx.eventLog  ctx.ide  ctx.ai  ctx.app      │   │
 │              │                                                │   │
 │              │  window.__OXIDE__                              │   │
 │              │    React · ReactDOM · zustand · lucideIcons   │   │
@@ -875,7 +885,7 @@ unloadPlugin(pluginId)
 
 ## 6. PluginContext API 完全参考
 
-`PluginContext` 是传递给 `activate(ctx)` 的唯一参数。它是一个深度冻结的对象，包含 10 个命名空间（`pluginId` + 9 个子 API）。
+`PluginContext` 是传递给 `activate(ctx)` 的唯一参数。它是一个深度冻结的对象，包含 19 个命名空间（`pluginId` + 18 个子 API）。v3 新增了 7 个只读命名空间。
 
 ```typescript
 type PluginContext = Readonly<{
@@ -889,6 +899,16 @@ type PluginContext = Readonly<{
   storage: PluginStorageAPI;
   api: PluginBackendAPI;
   assets: PluginAssetsAPI;
+  sftp: PluginSftpAPI;
+  forward: PluginForwardAPI;
+  // v3 新增命名空间
+  sessions: PluginSessionsAPI;   // 会话树（只读）
+  transfers: PluginTransfersAPI; // SFTP 传输监控
+  profiler: PluginProfilerAPI;   // 资源监控
+  eventLog: PluginEventLogAPI;   // 事件日志
+  ide: PluginIdeAPI;             // IDE 模式（只读）
+  ai: PluginAiAPI;               // AI 对话（只读）
+  app: PluginAppAPI;             // 应用信息
 }>;
 ```
 
@@ -1143,6 +1163,155 @@ if (ok) {
 }
 ```
 
+#### `registerContextMenu(target, items)` <small>v3</small>
+
+```typescript
+ui.registerContextMenu(target: ContextMenuTarget, items: ContextMenuItem[]): Disposable
+```
+
+为指定目标区域注册右键菜单项。`target` 可以是 `'terminal'`、`'sftp'`、`'tab'` 或 `'sidebar'`。
+
+```javascript
+ctx.ui.registerContextMenu('terminal', [
+  {
+    label: 'Run Analysis',
+    icon: 'BarChart',
+    handler: () => console.log('Analyzing...'),
+  },
+  {
+    label: 'Copy as Markdown',
+    handler: () => { /* ... */ },
+    when: () => ctx.terminal.getNodeSelection(currentNodeId) !== null,
+  },
+]);
+```
+
+#### `registerStatusBarItem(options)` <small>v3</small>
+
+```typescript
+ui.registerStatusBarItem(options: StatusBarItemOptions): StatusBarHandle
+```
+
+注册状态栏项，返回可更新/释放的句柄。
+
+```typescript
+type StatusBarItemOptions = {
+  text: string;
+  icon?: string;            // Lucide icon 名称
+  tooltip?: string;
+  alignment: 'left' | 'right';
+  priority?: number;        // 数字越小越靠前
+  onClick?: () => void;
+};
+
+type StatusBarHandle = {
+  update(options: Partial<StatusBarItemOptions>): void;
+  dispose(): void;
+};
+```
+
+```javascript
+const status = ctx.ui.registerStatusBarItem({
+  text: '✔ Connected',
+  icon: 'Wifi',
+  alignment: 'right',
+  priority: 100,
+  onClick: () => ctx.ui.openTab('dashboard'),
+});
+
+// 动态更新
+status.update({ text: '⚠ Reconnecting...', icon: 'WifiOff' });
+
+// 移除
+status.dispose();
+```
+
+#### `registerKeybinding(keybinding, handler)` <small>v3</small>
+
+```typescript
+ui.registerKeybinding(keybinding: string, handler: () => void): Disposable
+```
+
+注册全局键盘快捷键（与 Terminal Hooks 的 `registerShortcut` 不同，这里不需要在 manifest 中声明）。
+
+```javascript
+ctx.ui.registerKeybinding('ctrl+shift+p', () => {
+  console.log('Plugin action triggered!');
+});
+```
+
+#### `showNotification(opts)` <small>v3</small>
+
+```typescript
+ui.showNotification(opts: {
+  title: string;
+  body?: string;
+  severity?: 'info' | 'warning' | 'error';
+}): void
+```
+
+显示通知消息（内部映射到 toast 系统）。与 `showToast` 类似，但提供更语义化的 severity 参数。
+
+```javascript
+ctx.ui.showNotification({
+  title: 'Transfer Complete',
+  body: '5 files uploaded successfully',
+  severity: 'info',
+});
+```
+
+#### `showProgress(title)` <small>v3</small>
+
+```typescript
+ui.showProgress(title: string): ProgressReporter
+```
+
+显示进度指示器，返回可更新和关闭的 `ProgressReporter`。
+
+```typescript
+type ProgressReporter = {
+  report(value: number, total: number, message?: string): void;
+};
+```
+
+```javascript
+const progress = ctx.ui.showProgress('Deploying...');
+progress.report(3, 10, 'Uploading files...');
+progress.report(7, 10, 'Running scripts...');
+progress.report(10, 10, 'Done!');
+```
+
+#### `getLayout()` <small>v3</small>
+
+```typescript
+ui.getLayout(): Readonly<{
+  sidebarCollapsed: boolean;
+  activeTabId: string | null;
+  tabCount: number;
+}>
+```
+
+获取当前布局状态的只读快照。
+
+#### `onLayoutChange(handler)` <small>v3</small>
+
+```typescript
+ui.onLayoutChange(handler: (layout: Readonly<{
+  sidebarCollapsed: boolean;
+  activeTabId: string | null;
+  tabCount: number;
+}>) => void): Disposable
+```
+
+订阅布局变化事件。
+
+```javascript
+ctx.ui.onLayoutChange((layout) => {
+  console.log(`Sidebar: ${layout.sidebarCollapsed ? 'collapsed' : 'expanded'}`);
+  console.log(`Active tab: ${layout.activeTabId}`);
+});
+```
+
 ---
 
 ### 6.5 ctx.terminal
@@ -1264,6 +1433,66 @@ terminal.getSelection(sessionId: string): string | null
 ```
 
 返回用户在指定会话终端中选中的文本。
+
+#### `search(nodeId, query, options?)` <small>v3</small>
+
+```typescript
+terminal.search(nodeId: string, query: string, options?: {
+  caseSensitive?: boolean;
+  regex?: boolean;
+  wholeWord?: boolean;
+}): Promise<Readonly<{ matches: ReadonlyArray<unknown>; total_matches: number }>>
+```
+
+在终端缓冲区中搜索文本。通过后端 Rust 命令执行，支持正则和大小写敏感选项。
+
+```javascript
+const result = await ctx.terminal.search(nodeId, 'error', {
+  caseSensitive: false,
+  regex: false,
+});
+console.log(`Found ${result.total_matches} matches`);
+```
+
+#### `getScrollBuffer(nodeId, startLine, count)` <small>v3</small>
+
+```typescript
+terminal.getScrollBuffer(nodeId: string, startLine: number, count: number):
+  Promise<ReadonlyArray<Readonly<{ text: string; lineNumber: number }>>>
+```
+
+获取回滚缓冲区内容。返回指定范围的行数据。
+
+```javascript
+const lines = await ctx.terminal.getScrollBuffer(nodeId, 0, 100);
+lines.forEach(l => console.log(`[${l.lineNumber}] ${l.text}`));
+```
+
+#### `getBufferSize(nodeId)` <small>v3</small>
+
+```typescript
+terminal.getBufferSize(nodeId: string):
+  Promise<Readonly<{ currentLines: number; totalLines: number; maxLines: number }>>
+```
+
+获取缓冲区大小信息。
+
+```javascript
+const stats = await ctx.terminal.getBufferSize(nodeId);
+console.log(`Buffer: ${stats.currentLines}/${stats.maxLines} lines`);
+```
+
+#### `clearBuffer(nodeId)` <small>v3</small>
+
+```typescript
+terminal.clearBuffer(nodeId: string): Promise<void>
+```
+
+清空指定会话的终端缓冲区。
+
+```javascript
+await ctx.terminal.clearBuffer(nodeId);
+```
 
 ---
 
@@ -1702,6 +1931,564 @@ export async function activate(ctx) {
     );
   });
 }
+```
+
+---
+
+### 6.13 ctx.sessions (v3)
+
+会话树只读访问 API。所有数据以冻结快照形式提供。
+
+#### `getTree()`
+
+```typescript
+sessions.getTree(): ReadonlyArray<SessionTreeNodeSnapshot>
+```
+
+获取整个会话树的冻结快照。
+
+```typescript
+type SessionTreeNodeSnapshot = Readonly<{
+  id: string;
+  label: string;
+  host?: string;
+  port?: number;
+  username?: string;
+  parentId: string | null;
+  childIds: readonly string[];
+  connectionState: string;     // 'idle' | 'connecting' | 'active' | ...
+  connectionId: string | null;
+  terminalIds: readonly string[];
+  sftpSessionId: string | null;
+  errorMessage?: string;
+}>;
+```
+
+```javascript
+const tree = ctx.sessions.getTree();
+tree.forEach(node => {
+  console.log(`${node.label} (${node.connectionState})`);
+  if (node.host) console.log(`  → ${node.username}@${node.host}:${node.port}`);
+});
+```
+
+#### `getActiveNodes()`
+
+```typescript
+sessions.getActiveNodes(): ReadonlyArray<Readonly<{
+  nodeId: string;
+  sessionId: string | null;
+  connectionState: string;
+}>>
+```
+
+获取所有活跃（已连接）节点列表。
+
+#### `getNodeState(nodeId)`
+
+```typescript
+sessions.getNodeState(nodeId: string): string | null
+```
+
+获取单个节点的连接状态。返回 `null` 表示节点不存在。
+
+#### `onTreeChange(handler)`
+
+```typescript
+sessions.onTreeChange(handler: (tree: ReadonlyArray<SessionTreeNodeSnapshot>) => void): Disposable
+```
+
+订阅会话树结构变化。节点增删或连接状态变化时触发。
+
+```javascript
+ctx.sessions.onTreeChange((tree) => {
+  const activeCount = tree.filter(n => n.connectionState === 'active').length;
+  status.update({ text: `${activeCount} active` });
+});
+```
+
+#### `onNodeStateChange(nodeId, handler)`
+
+```typescript
+sessions.onNodeStateChange(nodeId: string, handler: (state: string) => void): Disposable
+```
+
+订阅特定节点的状态变化。
+
+---
+
+### 6.14 ctx.transfers (v3)
+
+SFTP 传输监控 API。只读访问，进度事件以 500ms 间隔节流。
+
+#### `getAll()`
+
+```typescript
+transfers.getAll(): ReadonlyArray<TransferSnapshot>
+```
+
+获取所有当前传输任务。
+
+```typescript
+type TransferSnapshot = Readonly<{
+  id: string;
+  nodeId: string;
+  name: string;
+  localPath: string;
+  remotePath: string;
+  direction: 'upload' | 'download';
+  size: number;
+  transferred: number;
+  state: 'pending' | 'active' | 'paused' | 'completed' | 'cancelled' | 'error';
+  error?: string;
+  startTime: number;
+  endTime?: number;
+}>;
+```
+
+```javascript
+const transfers = ctx.transfers.getAll();
+const active = transfers.filter(t => t.state === 'active');
+console.log(`${active.length} active transfers`);
+```
+
+#### `getByNode(nodeId)`
+
+```typescript
+transfers.getByNode(nodeId: string): ReadonlyArray<TransferSnapshot>
+```
+
+获取特定节点的传输任务。
+
+#### `onProgress(handler)`
+
+```typescript
+transfers.onProgress(handler: (transfer: TransferSnapshot) => void): Disposable
+```
+
+订阅传输进度更新。以 **500ms** 间隔节流，避免高频回调影响性能。
+
+```javascript
+ctx.transfers.onProgress((t) => {
+  const pct = Math.round((t.transferred / t.size) * 100);
+  console.log(`${t.name}: ${pct}%`);
+});
+```
+
+#### `onComplete(handler)` / `onError(handler)`
+
+```typescript
+transfers.onComplete(handler: (transfer: TransferSnapshot) => void): Disposable
+transfers.onError(handler: (transfer: TransferSnapshot) => void): Disposable
+```
+
+订阅传输完成/错误事件。
+
+```javascript
+ctx.transfers.onComplete((t) => {
+  ctx.ui.showToast({ title: `${t.name} uploaded`, variant: 'success' });
+});
+
+ctx.transfers.onError((t) => {
+  ctx.ui.showToast({ title: `${t.name} failed: ${t.error}`, variant: 'error' });
+});
+```
+
+---
+
+### 6.15 ctx.profiler (v3)
+
+资源监控 API。提供 CPU、内存、网络等系统指标的只读访问。指标以 **1s** 间隔节流推送。
+
+#### `getMetrics(nodeId)`
+
+```typescript
+profiler.getMetrics(nodeId: string): ProfilerMetricsSnapshot | null
+```
+
+获取节点的最新指标快照。
+
+```typescript
+type ProfilerMetricsSnapshot = Readonly<{
+  timestampMs: number;
+  cpuPercent: number | null;
+  memoryUsed: number | null;
+  memoryTotal: number | null;
+  memoryPercent: number | null;
+  loadAvg1: number | null;
+  loadAvg5: number | null;
+  loadAvg15: number | null;
+  cpuCores: number | null;
+  netRxBytesPerSec: number | null;
+  netTxBytesPerSec: number | null;
+  sshRttMs: number | null;
+}>;
+```
+
+```javascript
+const metrics = ctx.profiler.getMetrics(nodeId);
+if (metrics) {
+  console.log(`CPU: ${metrics.cpuPercent}%, Mem: ${metrics.memoryPercent}%`);
+}
+```
+
+#### `getHistory(nodeId, maxPoints?)`
+
+```typescript
+profiler.getHistory(nodeId: string, maxPoints?: number): ReadonlyArray<ProfilerMetricsSnapshot>
+```
+
+获取历史指标数据。`maxPoints` 限制返回的数据点数量（从最新开始）。
+
+#### `isRunning(nodeId)`
+
+```typescript
+profiler.isRunning(nodeId: string): boolean
+```
+
+检查指定节点的性能监控是否正在运行。
+
+#### `onMetrics(nodeId, handler)`
+
+```typescript
+profiler.onMetrics(nodeId: string, handler: (metrics: ProfilerMetricsSnapshot) => void): Disposable
+```
+
+订阅实时指标推送。以 **1 秒**间隔节流。
+
+```javascript
+ctx.profiler.onMetrics(nodeId, (m) => {
+  status.update({ text: `CPU ${m.cpuPercent?.toFixed(1)}%` });
+});
+```
+
+---
+
+### 6.16 ctx.eventLog (v3)
+
+连接事件日志只读访问 API。
+
+#### `getEntries(filter?)`
+
+```typescript
+eventLog.getEntries(filter?: {
+  severity?: 'info' | 'warn' | 'error';
+  category?: 'connection' | 'reconnect' | 'node';
+}): ReadonlyArray<EventLogEntrySnapshot>
+```
+
+获取事件日志条目，支持按 severity/category 过滤。
+
+```typescript
+type EventLogEntrySnapshot = Readonly<{
+  id: number;
+  timestamp: number;
+  severity: 'info' | 'warn' | 'error';
+  category: 'connection' | 'reconnect' | 'node';
+  nodeId?: string;
+  connectionId?: string;
+  title: string;
+  detail?: string;
+  source: string;
+}>;
+```
+
+```javascript
+const errors = ctx.eventLog.getEntries({ severity: 'error' });
+console.log(`${errors.length} errors in log`);
+
+errors.forEach(e => {
+  console.log(`[${new Date(e.timestamp).toISOString()}] ${e.title}`);
+});
+```
+
+#### `onEntry(handler)`
+
+```typescript
+eventLog.onEntry(handler: (entry: EventLogEntrySnapshot) => void): Disposable
+```
+
+订阅新的日志条目。
+
+```javascript
+ctx.eventLog.onEntry((entry) => {
+  if (entry.severity === 'error') {
+    ctx.ui.showNotification({
+      title: entry.title,
+      body: entry.detail,
+      severity: 'error',
+    });
+  }
+});
+```
+
+---
+
+### 6.17 ctx.ide (v3)
+
+IDE 模式只读访问 API。当 OxideTerm 的内置代码编辑器（基于 CodeMirror）激活时，可读取项目和文件信息。
+
+#### `isOpen()`
+
+```typescript
+ide.isOpen(): boolean
+```
+
+检查 IDE 模式是否激活。
+
+#### `getProject()`
+
+```typescript
+ide.getProject(): IdeProjectSnapshot | null
+```
+
+获取当前项目信息。
+
+```typescript
+type IdeProjectSnapshot = Readonly<{
+  nodeId: string;
+  rootPath: string;
+  name: string;
+  isGitRepo: boolean;
+  gitBranch?: string;
+}>;
+```
+
+```javascript
+const project = ctx.ide.getProject();
+if (project) {
+  console.log(`Project: ${project.name} @ ${project.rootPath}`);
+  if (project.isGitRepo) console.log(`Branch: ${project.gitBranch}`);
+}
+```
+
+#### `getOpenFiles()`
+
+```typescript
+ide.getOpenFiles(): ReadonlyArray<IdeFileSnapshot>
+```
+
+获取所有打开的文件列表。
+
+```typescript
+type IdeFileSnapshot = Readonly<{
+  path: string;
+  name: string;
+  language: string;
+  isDirty: boolean;
+  isActive: boolean;
+  isPinned: boolean;
+}>;
+```
+
+#### `getActiveFile()`
+
+```typescript
+ide.getActiveFile(): IdeFileSnapshot | null
+```
+
+获取当前活跃的文件。
+
+#### `onFileOpen(handler)` / `onFileClose(handler)`
+
+```typescript
+ide.onFileOpen(handler: (file: IdeFileSnapshot) => void): Disposable
+ide.onFileClose(handler: (path: string) => void): Disposable
+```
+
+订阅文件打开/关闭事件。
+
+#### `onActiveFileChange(handler)`
+
+```typescript
+ide.onActiveFileChange(handler: (file: IdeFileSnapshot | null) => void): Disposable
+```
+
+订阅活跃文件切换事件。
+
+```javascript
+ctx.ide.onActiveFileChange((file) => {
+  if (file) {
+    console.log(`Now editing: ${file.name} (${file.language})`);
+  }
+});
+```
+
+---
+
+### 6.18 ctx.ai (v3)
+
+AI 对话只读访问 API。可读取对话列表和消息，但不能发起对话或发送消息。
+
+> ⚠️ AI 消息可能包含终端缓冲区内容，应视为敏感数据。
+
+#### `getConversations()`
+
+```typescript
+ai.getConversations(): ReadonlyArray<AiConversationSnapshot>
+```
+
+获取所有对话摘要。
+
+```typescript
+type AiConversationSnapshot = Readonly<{
+  id: string;
+  title: string;
+  messageCount: number;
+  createdAt: number;
+  updatedAt: number;
+}>;
+```
+
+#### `getMessages(conversationId)`
+
+```typescript
+ai.getMessages(conversationId: string): ReadonlyArray<AiMessageSnapshot>
+```
+
+获取指定对话的所有消息。
+
+```typescript
+type AiMessageSnapshot = Readonly<{
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: number;
+}>;
+```
+
+```javascript
+const convs = ctx.ai.getConversations();
+if (convs.length > 0) {
+  const messages = ctx.ai.getMessages(convs[0].id);
+  console.log(`Latest conversation: ${convs[0].title} (${messages.length} messages)`);
+}
+```
+
+#### `getActiveProvider()` / `getAvailableModels()`
+
+```typescript
+ai.getActiveProvider(): Readonly<{ type: string; displayName: string }> | null
+ai.getAvailableModels(): ReadonlyArray<string>
+```
+
+获取当前 AI 提供商信息和可用模型列表。
+
+```javascript
+const provider = ctx.ai.getActiveProvider();
+if (provider) {
+  console.log(`AI Provider: ${provider.displayName} (${provider.type})`);
+  const models = ctx.ai.getAvailableModels();
+  console.log(`Available models: ${models.join(', ')}`);
+}
+```
+
+#### `onMessage(handler)`
+
+```typescript
+ai.onMessage(handler: (info: Readonly<{
+  conversationId: string;
+  messageId: string;
+  role: string;
+}>) => void): Disposable
+```
+
+订阅新消息事件（不包含消息内容，需通过 `getMessages()` 获取）。
+
+---
+
+### 6.19 ctx.app (v3)
+
+应用级只读信息 API。提供主题、设置、平台、版本等全局信息。
+
+#### `getTheme()`
+
+```typescript
+app.getTheme(): ThemeSnapshot
+```
+
+获取当前主题信息。
+
+```typescript
+type ThemeSnapshot = Readonly<{
+  name: string;
+  isDark: boolean;
+}>;
+```
+
+```javascript
+const theme = ctx.app.getTheme();
+console.log(`Theme: ${theme.name} (${theme.isDark ? 'dark' : 'light'})`);
+```
+
+#### `getSettings(category)`
+
+```typescript
+app.getSettings(category: 'terminal' | 'appearance' | 'general' | 'buffer' | 'sftp' | 'reconnect'):
+  Readonly<Record<string, unknown>>
+```
+
+获取指定类别的应用设置快照（只读）。
+
+```javascript
+const terminalSettings = ctx.app.getSettings('terminal');
+console.log('Font size:', terminalSettings.fontSize);
+```
+
+#### `getVersion()` / `getPlatform()` / `getLocale()`
+
+```typescript
+app.getVersion(): string       // e.g. '1.6.2'
+app.getPlatform(): 'macos' | 'windows' | 'linux'
+app.getLocale(): string        // e.g. 'zh-CN', 'en'
+```
+
+```javascript
+console.log(`OxideTerm ${ctx.app.getVersion()} on ${ctx.app.getPlatform()}`);
+console.log(`Locale: ${ctx.app.getLocale()}`);
+```
+
+#### `onThemeChange(handler)`
+
+```typescript
+app.onThemeChange(handler: (theme: ThemeSnapshot) => void): Disposable
+```
+
+订阅主题切换事件。
+
+```javascript
+ctx.app.onThemeChange((theme) => {
+  console.log(`Theme changed to ${theme.name}`);
+  // 插件可以据此调整自己的 UI
+});
+```
+
+#### `onSettingsChange(category, handler)`
+
+```typescript
+app.onSettingsChange(category: string, handler: (settings: Readonly<Record<string, unknown>>) => void): Disposable
+```
+
+订阅指定类别的设置变化。
+
+#### `getPoolStats()`
+
+```typescript
+app.getPoolStats(): Promise<PoolStatsSnapshot>
+```
+
+获取 SSH 连接池统计信息。
+
+```typescript
+type PoolStatsSnapshot = Readonly<{
+  activeConnections: number;
+  totalSessions: number;
+}>;
+```
+
+```javascript
+const stats = await ctx.app.getPoolStats();
+console.log(`Pool: ${stats.activeConnections} connections, ${stats.totalSessions} sessions`);
 ```
 
 ---
@@ -2675,6 +3462,35 @@ type SshConnectionState =
   | { error: string };   // 注意：error 状态是一个对象
 ```
 
+### 10.5 传输事件 (v3)
+
+v3 新增 SFTP 传输相关事件，通过 `ctx.transfers` API 订阅：
+
+| 事件方法 | 触发条件 |
+|----------|---------|
+| `transfers.onProgress(handler)` | 传输进度更新（500ms 节流） |
+| `transfers.onComplete(handler)` | 传输完成 |
+| `transfers.onError(handler)` | 传输出错 |
+
+所有 handler 收到 `TransferSnapshot` 对象（参见 [6.14](#614-ctxtransfers-v3)）。
+
+```javascript
+// 监控所有传输
+ctx.transfers.onProgress((t) => {
+  const pct = ((t.transferred / t.size) * 100).toFixed(1);
+  console.log(`[${t.direction}] ${t.name}: ${pct}%`);
+});
+
+ctx.transfers.onComplete((t) => {
+  const duration = ((t.endTime - t.startTime) / 1000).toFixed(1);
+  console.log(`Done: ${t.name} in ${duration}s`);
+});
+
+ctx.transfers.onError((t) => {
+  console.error(`Failed: ${t.name} — ${t.error}`);
+});
+```
+
 ---
 
 ## 11. 国际化 (i18n)
@@ -3154,6 +3970,18 @@ export function deactivate() {
 3. **不要直接导入 `@tauri-apps/api/core`**（虽然技术上可行）
 4. **不要存储密码/密钥到 ctx.storage**（localStorage 不加密）
 
+### v3 API 建议
+
+1. **快照不可变性**：所有 v3 快照（`TransferSnapshot`、`ProfilerMetricsSnapshot` 等）通过 `Object.freeze()` 冻结。不要尝试修改它们——如需变换数据，创建新对象。
+
+2. **节流事件注意性能**：`transfers.onProgress`（500ms）和 `profiler.onMetrics`（1s）已做节流，但 handler 内仍应保持轻量——避免 DOM 操作或复杂计算。
+
+3. **按需使用命名空间**：v3 的 19 个命名空间按需注入。如果你只需要 `ui` 和 `terminal`，不必关心 `profiler` 或 `ai`。
+
+4. **Disposable 生命周期**：v3 事件订阅（`onTreeChange`、`onProgress`、`onMetrics` 等）返回 `Disposable`。务必在 `deactivate()` 中清理，或使用 `ctx.events.on` 系列 API 由框架自动管理。
+
+5. **AI 数据敏感性**：`ctx.ai.getMessages()` 可能包含终端缓冲区内容，视为敏感数据——不要记录到日志或发送到外部服务。
+
 ---
 
 ## 18. 调试技巧
@@ -3288,6 +4116,11 @@ npx esbuild src/index.ts \
 - 添加 Tab 视图
 - 添加 Sidebar 面板
 - 显示 Toast/Confirm
+- **v3 新增**：注册上下文菜单项（`ctx.ui.registerContextMenu`）
+- **v3 新增**：注册状态栏项（`ctx.ui.registerStatusBarItem`）
+- **v3 新增**：注册快捷键（`ctx.ui.registerKeybinding`）
+- **v3 新增**：显示通知（`ctx.ui.showNotification`）
+- **v3 新增**：显示进度指示器（`ctx.ui.showProgress`）
 
 不能：
 - 修改现有 UI 组件
@@ -3488,6 +4321,41 @@ export type PluginUIAPI = {
     variant?: 'default' | 'success' | 'error' | 'warning';
   }): void;
   showConfirm(opts: { title: string; description: string }): Promise<boolean>;
+  /** v3 additions */
+  registerContextMenu(target: ContextMenuTarget, items: ContextMenuItem[]): Disposable;
+  registerStatusBarItem(options: StatusBarItemOptions): StatusBarHandle;
+  registerKeybinding(keybinding: string, handler: () => void): Disposable;
+  showNotification(opts: { title: string; body?: string; severity?: 'info' | 'warning' | 'error' }): void;
+  showProgress(title: string): ProgressReporter;
+  getLayout(): Readonly<{ sidebarCollapsed: boolean; activeTabId: string | null; tabCount: number }>;
+  onLayoutChange(handler: (layout: Readonly<{ sidebarCollapsed: boolean; activeTabId: string | null; tabCount: number }>) => void): Disposable;
+};
+
+export type ContextMenuTarget = 'terminal' | 'sftp' | 'tab' | 'sidebar';
+
+export type ContextMenuItem = {
+  label: string;
+  icon?: string;
+  handler: () => void;
+  when?: () => boolean;
+};
+
+export type StatusBarItemOptions = {
+  text: string;
+  icon?: string;
+  tooltip?: string;
+  alignment: 'left' | 'right';
+  priority?: number;
+  onClick?: () => void;
+};
+
+export type StatusBarHandle = {
+  update(options: Partial<StatusBarItemOptions>): void;
+  dispose(): void;
+};
+
+export type ProgressReporter = {
+  report(value: number, total: number, message?: string): void;
 };
 
 export type PluginTerminalAPI = {
@@ -3500,6 +4368,14 @@ export type PluginTerminalAPI = {
   getNodeBuffer(nodeId: string): string | null;
   /** Get terminal selection by nodeId */
   getNodeSelection(nodeId: string): string | null;
+  /** v3: Search terminal buffer */
+  search(nodeId: string, query: string, options?: { caseSensitive?: boolean; regex?: boolean; wholeWord?: boolean }): Promise<Readonly<{ matches: ReadonlyArray<unknown>; total_matches: number }>>;
+  /** v3: Get scrollback buffer content */
+  getScrollBuffer(nodeId: string, startLine: number, count: number): Promise<ReadonlyArray<Readonly<{ text: string; lineNumber: number }>>>;
+  /** v3: Get buffer size info */
+  getBufferSize(nodeId: string): Promise<Readonly<{ currentLines: number; totalLines: number; maxLines: number }>>;
+  /** v3: Clear terminal buffer */
+  clearBuffer(nodeId: string): Promise<void>;
 };
 
 export type PluginSettingsAPI = {
@@ -3530,6 +4406,164 @@ export type PluginAssetsAPI = {
   revokeAssetUrl(url: string): void;
 };
 
+// ── v3 Snapshot Types ───────────────────────────────────────
+export type SessionTreeNodeSnapshot = Readonly<{
+  id: string;
+  label: string;
+  host?: string;
+  port?: number;
+  username?: string;
+  parentId: string | null;
+  childIds: readonly string[];
+  connectionState: string;
+  connectionId: string | null;
+  terminalIds: readonly string[];
+  sftpSessionId: string | null;
+  errorMessage?: string;
+}>;
+
+export type TransferSnapshot = Readonly<{
+  id: string;
+  nodeId: string;
+  name: string;
+  localPath: string;
+  remotePath: string;
+  direction: 'upload' | 'download';
+  size: number;
+  transferred: number;
+  state: 'pending' | 'active' | 'paused' | 'completed' | 'cancelled' | 'error';
+  error?: string;
+  startTime: number;
+  endTime?: number;
+}>;
+
+export type ProfilerMetricsSnapshot = Readonly<{
+  timestampMs: number;
+  cpuPercent: number | null;
+  memoryUsed: number | null;
+  memoryTotal: number | null;
+  memoryPercent: number | null;
+  loadAvg1: number | null;
+  loadAvg5: number | null;
+  loadAvg15: number | null;
+  cpuCores: number | null;
+  netRxBytesPerSec: number | null;
+  netTxBytesPerSec: number | null;
+  sshRttMs: number | null;
+}>;
+
+export type EventLogEntrySnapshot = Readonly<{
+  id: number;
+  timestamp: number;
+  severity: 'info' | 'warn' | 'error';
+  category: 'connection' | 'reconnect' | 'node';
+  nodeId?: string;
+  connectionId?: string;
+  title: string;
+  detail?: string;
+  source: string;
+}>;
+
+export type IdeFileSnapshot = Readonly<{
+  path: string;
+  name: string;
+  language: string;
+  isDirty: boolean;
+  isActive: boolean;
+  isPinned: boolean;
+}>;
+
+export type IdeProjectSnapshot = Readonly<{
+  nodeId: string;
+  rootPath: string;
+  name: string;
+  isGitRepo: boolean;
+  gitBranch?: string;
+}>;
+
+export type AiConversationSnapshot = Readonly<{
+  id: string;
+  title: string;
+  messageCount: number;
+  createdAt: number;
+  updatedAt: number;
+}>;
+
+export type AiMessageSnapshot = Readonly<{
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: number;
+}>;
+
+export type ThemeSnapshot = Readonly<{
+  name: string;
+  isDark: boolean;
+}>;
+
+export type PoolStatsSnapshot = Readonly<{
+  activeConnections: number;
+  totalSessions: number;
+}>;
+
+// ── v3 Namespace Interfaces ─────────────────────────────────
+export type PluginSessionsAPI = {
+  getTree(): ReadonlyArray<SessionTreeNodeSnapshot>;
+  getActiveNodes(): ReadonlyArray<Readonly<{ nodeId: string; sessionId: string | null; connectionState: string }>>;
+  getNodeState(nodeId: string): string | null;
+  onTreeChange(handler: (tree: ReadonlyArray<SessionTreeNodeSnapshot>) => void): Disposable;
+  onNodeStateChange(nodeId: string, handler: (state: string) => void): Disposable;
+};
+
+export type PluginTransfersAPI = {
+  getAll(): ReadonlyArray<TransferSnapshot>;
+  getByNode(nodeId: string): ReadonlyArray<TransferSnapshot>;
+  onProgress(handler: (transfer: TransferSnapshot) => void): Disposable;
+  onComplete(handler: (transfer: TransferSnapshot) => void): Disposable;
+  onError(handler: (transfer: TransferSnapshot) => void): Disposable;
+};
+
+export type PluginProfilerAPI = {
+  getMetrics(nodeId: string): ProfilerMetricsSnapshot | null;
+  getHistory(nodeId: string, maxPoints?: number): ReadonlyArray<ProfilerMetricsSnapshot>;
+  isRunning(nodeId: string): boolean;
+  onMetrics(nodeId: string, handler: (metrics: ProfilerMetricsSnapshot) => void): Disposable;
+};
+
+export type PluginEventLogAPI = {
+  getEntries(filter?: { severity?: 'info' | 'warn' | 'error'; category?: 'connection' | 'reconnect' | 'node' }): ReadonlyArray<EventLogEntrySnapshot>;
+  onEntry(handler: (entry: EventLogEntrySnapshot) => void): Disposable;
+};
+
+export type PluginIdeAPI = {
+  isOpen(): boolean;
+  getProject(): IdeProjectSnapshot | null;
+  getOpenFiles(): ReadonlyArray<IdeFileSnapshot>;
+  getActiveFile(): IdeFileSnapshot | null;
+  onFileOpen(handler: (file: IdeFileSnapshot) => void): Disposable;
+  onFileClose(handler: (path: string) => void): Disposable;
+  onActiveFileChange(handler: (file: IdeFileSnapshot | null) => void): Disposable;
+};
+
+export type PluginAiAPI = {
+  getConversations(): ReadonlyArray<AiConversationSnapshot>;
+  getMessages(conversationId: string): ReadonlyArray<AiMessageSnapshot>;
+  getActiveProvider(): Readonly<{ type: string; displayName: string }> | null;
+  getAvailableModels(): ReadonlyArray<string>;
+  onMessage(handler: (info: Readonly<{ conversationId: string; messageId: string; role: string }>) => void): Disposable;
+};
+
+export type PluginAppAPI = {
+  getTheme(): ThemeSnapshot;
+  getSettings(category: 'terminal' | 'appearance' | 'general' | 'buffer' | 'sftp' | 'reconnect'): Readonly<Record<string, unknown>>;
+  getVersion(): string;
+  getPlatform(): 'macos' | 'windows' | 'linux';
+  getLocale(): string;
+  onThemeChange(handler: (theme: ThemeSnapshot) => void): Disposable;
+  onSettingsChange(category: string, handler: (settings: Readonly<Record<string, unknown>>) => void): Disposable;
+  getPoolStats(): Promise<PoolStatsSnapshot>;
+};
+
 // ── Plugin Context ──────────────────────────────────────────
 export type PluginContext = Readonly<{
   pluginId: string;
@@ -3542,6 +4576,14 @@ export type PluginContext = Readonly<{
   storage: PluginStorageAPI;
   api: PluginBackendAPI;
   assets: PluginAssetsAPI;
+  /** v3 namespaces */
+  sessions: PluginSessionsAPI;
+  transfers: PluginTransfersAPI;
+  profiler: PluginProfilerAPI;
+  eventLog: PluginEventLogAPI;
+  ide: PluginIdeAPI;
+  ai: PluginAiAPI;
+  app: PluginAppAPI;
 }>;
 
 // ── Plugin Manifest (v2) ────────────────────────────────────
@@ -3583,7 +4625,7 @@ declare global {
       lucideReact: typeof import('lucide-react');
       ui: PluginUIKit;         // 24 个预置 UI 组件
       version: string;         // OxideTerm 版本号
-      pluginApiVersion: number; // 插件 API 版本号 (2 = current)
+      pluginApiVersion: number; // 插件 API 版本号 (3 = current)
     };
   }
 }
@@ -3754,7 +4796,9 @@ declare global {
 | `src/components/plugin/PluginTabRenderer.tsx` | 插件 Tab 渲染器 |
 | `src/components/plugin/PluginSidebarRenderer.tsx` | 插件 Sidebar 渲染器 |
 | `src/components/plugin/PluginConfirmDialog.tsx` | 主题化确认对话框（Radix UI） |
+| `src/lib/plugin/pluginSnapshots.ts` | v3 快照生成工厂（冻结 + 深拷贝） |
+| `src/lib/plugin/pluginThrottledEvents.ts` | v3 节流事件桥接（transfers 500ms / profiler 1s） |
 
 ---
 
-*本文档基于 OxideTerm v1.6.2 插件系统源码自动生成。如有疑问，请参考上述源码文件或提交 Issue。*
+*本文档基于 OxideTerm v1.6.2（Plugin API v3）插件系统源码更新。最后更新：2026-03-15。如有疑问，请参考上述源码文件或提交 Issue。*

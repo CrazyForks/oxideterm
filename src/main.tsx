@@ -46,7 +46,7 @@ window.__OXIDE__ = {
   cn,
   useTranslation,
   version: '1.6.2',
-  pluginApiVersion: 2,
+  pluginApiVersion: 3,
 }
 
 // Initialize settings (including theme) before rendering

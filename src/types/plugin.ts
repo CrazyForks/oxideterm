@@ -216,6 +216,24 @@ export type PluginUIAPI = {
     variant?: 'default' | 'success' | 'error' | 'warning';
   }): void;
   showConfirm(opts: { title: string; description: string }): Promise<boolean>;
+  /** v3: Register context menu items for a target area */
+  registerContextMenu(target: ContextMenuTarget, items: ContextMenuItem[]): Disposable;
+  /** v3: Register a status bar item */
+  registerStatusBarItem(options: StatusBarItemOptions): StatusBarHandle;
+  /** v3: Register a global keybinding */
+  registerKeybinding(keybinding: string, handler: () => void): Disposable;
+  /** v3: Show a notification (maps to toast system) */
+  showNotification(opts: {
+    title: string;
+    body?: string;
+    severity?: 'info' | 'warning' | 'error';
+  }): void;
+  /** v3: Show a progress indicator, returns a reporter to update and dismiss */
+  showProgress(title: string): ProgressReporter;
+  /** v3: Get current layout info (read-only) */
+  getLayout(): Readonly<{ sidebarCollapsed: boolean; activeTabId: string | null; tabCount: number }>;
+  /** v3: Subscribe to layout changes */
+  onLayoutChange(handler: (layout: Readonly<{ sidebarCollapsed: boolean; activeTabId: string | null; tabCount: number }>) => void): Disposable;
 };
 
 /** Plugin command entry stored in pluginStore */
@@ -240,6 +258,14 @@ export type PluginTerminalAPI = {
   getNodeBuffer(nodeId: string): string | null;
   /** Get terminal selection by nodeId */
   getNodeSelection(nodeId: string): string | null;
+  /** v3: Search terminal buffer */
+  search(nodeId: string, query: string, options?: { caseSensitive?: boolean; regex?: boolean; wholeWord?: boolean }): Promise<Readonly<{ matches: ReadonlyArray<unknown>; total_matches: number }>>;
+  /** v3: Get scrollback buffer content */
+  getScrollBuffer(nodeId: string, startLine: number, count: number): Promise<ReadonlyArray<Readonly<{ text: string; lineNumber: number }>>>;
+  /** v3: Get buffer size info */
+  getBufferSize(nodeId: string): Promise<Readonly<{ currentLines: number; totalLines: number; maxLines: number }>>;
+  /** v3: Clear terminal buffer */
+  clearBuffer(nodeId: string): Promise<void>;
 };
 
 /** ctx.settings — plugin-scoped settings */
@@ -356,7 +382,256 @@ export type PluginForwardAPI = {
   } | null>;
 };
 
-/** The full PluginContext passed to activate() */
+// ═══════════════════════════════════════════════════════════════════════════
+// Plugin API v3 — New Snapshot Types
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Frozen session tree node for plugin consumption */
+export type SessionTreeNodeSnapshot = Readonly<{
+  id: string;
+  label: string;
+  host?: string;
+  port?: number;
+  username?: string;
+  parentId: string | null;
+  childIds: readonly string[];
+  connectionState: string;
+  connectionId: string | null;
+  terminalIds: readonly string[];
+  sftpSessionId: string | null;
+  errorMessage?: string;
+}>;
+
+/** Frozen transfer item for plugin consumption */
+export type TransferSnapshot = Readonly<{
+  id: string;
+  nodeId: string;
+  name: string;
+  localPath: string;
+  remotePath: string;
+  direction: 'upload' | 'download';
+  size: number;
+  transferred: number;
+  state: 'pending' | 'active' | 'paused' | 'completed' | 'cancelled' | 'error';
+  error?: string;
+  startTime: number;
+  endTime?: number;
+}>;
+
+/** Frozen resource metrics for plugin consumption */
+export type ProfilerMetricsSnapshot = Readonly<{
+  timestampMs: number;
+  cpuPercent: number | null;
+  memoryUsed: number | null;
+  memoryTotal: number | null;
+  memoryPercent: number | null;
+  loadAvg1: number | null;
+  loadAvg5: number | null;
+  loadAvg15: number | null;
+  cpuCores: number | null;
+  netRxBytesPerSec: number | null;
+  netTxBytesPerSec: number | null;
+  sshRttMs: number | null;
+}>;
+
+/** Frozen event log entry for plugin consumption */
+export type EventLogEntrySnapshot = Readonly<{
+  id: number;
+  timestamp: number;
+  severity: 'info' | 'warn' | 'error';
+  category: 'connection' | 'reconnect' | 'node';
+  nodeId?: string;
+  connectionId?: string;
+  title: string;
+  detail?: string;
+  source: string;
+}>;
+
+/** Frozen IDE file info for plugin consumption */
+export type IdeFileSnapshot = Readonly<{
+  path: string;
+  name: string;
+  language: string;
+  isDirty: boolean;
+  isActive: boolean;
+  isPinned: boolean;
+}>;
+
+/** Frozen IDE project info for plugin consumption */
+export type IdeProjectSnapshot = Readonly<{
+  nodeId: string;
+  rootPath: string;
+  name: string;
+  isGitRepo: boolean;
+  gitBranch?: string;
+}>;
+
+/** Frozen AI conversation summary for plugin consumption */
+export type AiConversationSnapshot = Readonly<{
+  id: string;
+  title: string;
+  messageCount: number;
+  createdAt: number;
+  updatedAt: number;
+}>;
+
+/** Frozen AI message for plugin consumption */
+export type AiMessageSnapshot = Readonly<{
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: number;
+}>;
+
+/** Theme info for plugin consumption */
+export type ThemeSnapshot = Readonly<{
+  name: string;
+  isDark: boolean;
+}>;
+
+/** Pool statistics for plugin consumption */
+export type PoolStatsSnapshot = Readonly<{
+  activeConnections: number;
+  totalSessions: number;
+}>;
+
+/** Status bar item options */
+export type StatusBarItemOptions = {
+  text: string;
+  icon?: string;
+  tooltip?: string;
+  alignment: 'left' | 'right';
+  priority?: number;
+  onClick?: () => void;
+};
+
+/** Status bar item handle returned to plugins */
+export type StatusBarHandle = {
+  update(options: Partial<StatusBarItemOptions>): void;
+  dispose(): void;
+};
+
+/** Context menu target areas */
+export type ContextMenuTarget = 'terminal' | 'sftp' | 'tab' | 'sidebar';
+
+/** Context menu item definition */
+export type ContextMenuItem = {
+  label: string;
+  icon?: string;
+  handler: () => void;
+  when?: () => boolean;
+};
+
+/** Progress reporter passed to showProgress callback */
+export type ProgressReporter = {
+  report(value: number, total: number, message?: string): void;
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Plugin API v3 — New Namespace Interfaces
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** ctx.sessions — read-only session tree access */
+export type PluginSessionsAPI = {
+  /** Get a frozen snapshot of the entire session tree */
+  getTree(): ReadonlyArray<SessionTreeNodeSnapshot>;
+  /** Get active (connected) nodes */
+  getActiveNodes(): ReadonlyArray<Readonly<{ nodeId: string; sessionId: string | null; connectionState: string }>>;
+  /** Get a single node's state */
+  getNodeState(nodeId: string): string | null;
+  /** Subscribe to tree structure changes */
+  onTreeChange(handler: (tree: ReadonlyArray<SessionTreeNodeSnapshot>) => void): Disposable;
+  /** Subscribe to a specific node's state changes */
+  onNodeStateChange(nodeId: string, handler: (state: string) => void): Disposable;
+};
+
+/** ctx.transfers — SFTP transfer monitoring */
+export type PluginTransfersAPI = {
+  /** Get all current transfers */
+  getAll(): ReadonlyArray<TransferSnapshot>;
+  /** Get transfers for a specific node */
+  getByNode(nodeId: string): ReadonlyArray<TransferSnapshot>;
+  /** Subscribe to transfer progress (throttled 500ms) */
+  onProgress(handler: (transfer: TransferSnapshot) => void): Disposable;
+  /** Subscribe to transfer completion */
+  onComplete(handler: (transfer: TransferSnapshot) => void): Disposable;
+  /** Subscribe to transfer errors */
+  onError(handler: (transfer: TransferSnapshot) => void): Disposable;
+};
+
+/** ctx.profiler — resource monitoring */
+export type PluginProfilerAPI = {
+  /** Get current metrics for a node */
+  getMetrics(nodeId: string): ProfilerMetricsSnapshot | null;
+  /** Get historical metrics */
+  getHistory(nodeId: string, maxPoints?: number): ReadonlyArray<ProfilerMetricsSnapshot>;
+  /** Check if profiler is running for a node */
+  isRunning(nodeId: string): boolean;
+  /** Subscribe to live metrics (throttled 1s) */
+  onMetrics(nodeId: string, handler: (metrics: ProfilerMetricsSnapshot) => void): Disposable;
+};
+
+/** ctx.eventLog — connection event log access */
+export type PluginEventLogAPI = {
+  /** Get log entries with optional filter */
+  getEntries(filter?: { severity?: 'info' | 'warn' | 'error'; category?: 'connection' | 'reconnect' | 'node' }): ReadonlyArray<EventLogEntrySnapshot>;
+  /** Subscribe to new log entries */
+  onEntry(handler: (entry: EventLogEntrySnapshot) => void): Disposable;
+};
+
+/** ctx.ide — read-only IDE mode access */
+export type PluginIdeAPI = {
+  /** Check if IDE mode is active */
+  isOpen(): boolean;
+  /** Get current project info */
+  getProject(): IdeProjectSnapshot | null;
+  /** Get list of open files */
+  getOpenFiles(): ReadonlyArray<IdeFileSnapshot>;
+  /** Get the currently active file */
+  getActiveFile(): IdeFileSnapshot | null;
+  /** Subscribe to file open events */
+  onFileOpen(handler: (file: IdeFileSnapshot) => void): Disposable;
+  /** Subscribe to file close events */
+  onFileClose(handler: (path: string) => void): Disposable;
+  /** Subscribe to active file change */
+  onActiveFileChange(handler: (file: IdeFileSnapshot | null) => void): Disposable;
+};
+
+/** ctx.ai — read-only AI chat access */
+export type PluginAiAPI = {
+  /** Get all conversation summaries */
+  getConversations(): ReadonlyArray<AiConversationSnapshot>;
+  /** Get messages for a conversation (content sanitized) */
+  getMessages(conversationId: string): ReadonlyArray<AiMessageSnapshot>;
+  /** Get active AI provider info */
+  getActiveProvider(): Readonly<{ type: string; displayName: string }> | null;
+  /** Get available model IDs */
+  getAvailableModels(): ReadonlyArray<string>;
+  /** Subscribe to new message events */
+  onMessage(handler: (info: Readonly<{ conversationId: string; messageId: string; role: string }>) => void): Disposable;
+};
+
+/** ctx.app — application-level read-only info */
+export type PluginAppAPI = {
+  /** Get current theme info */
+  getTheme(): ThemeSnapshot;
+  /** Get a read-only snapshot of app settings for a category */
+  getSettings(category: 'terminal' | 'appearance' | 'general' | 'buffer' | 'sftp' | 'reconnect'): Readonly<Record<string, unknown>>;
+  /** Get application version string */
+  getVersion(): string;
+  /** Get host platform */
+  getPlatform(): 'macos' | 'windows' | 'linux';
+  /** Get current UI locale */
+  getLocale(): string;
+  /** Subscribe to theme changes */
+  onThemeChange(handler: (theme: ThemeSnapshot) => void): Disposable;
+  /** Subscribe to settings changes in a category */
+  onSettingsChange(category: string, handler: (settings: Readonly<Record<string, unknown>>) => void): Disposable;
+  /** Get connection pool statistics */
+  getPoolStats(): Promise<PoolStatsSnapshot>;
+};
+
+/** The full PluginContext passed to activate() (v3) */
 export type PluginContext = Readonly<{
   pluginId: string;
   connections: PluginConnectionsAPI;
@@ -372,6 +647,20 @@ export type PluginContext = Readonly<{
   sftp: PluginSftpAPI;
   /** Port forwarding management */
   forward: PluginForwardAPI;
+  /** v3: Session tree (read-only) */
+  sessions: PluginSessionsAPI;
+  /** v3: SFTP transfer monitoring */
+  transfers: PluginTransfersAPI;
+  /** v3: Resource profiler */
+  profiler: PluginProfilerAPI;
+  /** v3: Event log */
+  eventLog: PluginEventLogAPI;
+  /** v3: IDE mode (read-only) */
+  ide: PluginIdeAPI;
+  /** v3: AI chat (read-only) */
+  ai: PluginAiAPI;
+  /** v3: Application info */
+  app: PluginAppAPI;
 }>;
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -445,7 +734,7 @@ declare global {
       useTranslation: typeof import('react-i18next').useTranslation;
       /** Host application version */
       version: string;
-      /** Plugin API version (2 = current) */
+      /** Plugin API version (3 = current) */
       pluginApiVersion: number;
     };
   }
