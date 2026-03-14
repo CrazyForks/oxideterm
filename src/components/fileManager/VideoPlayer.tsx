@@ -19,6 +19,7 @@ import {
   PictureInPicture2, Info, Film,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { Slider } from '../ui/slider';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -219,10 +220,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, name, mimeType, f
     if (el) { el.muted = !el.muted; setMuted(el.muted); }
   }, []);
 
-  const onVolumeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const onVolumeChange = useCallback((v: number) => {
     const el = videoRef.current;
     if (!el) return;
-    const v = Number(e.target.value);
     el.volume = v;
     setVolume(v);
     if (v > 0 && el.muted) { el.muted = false; setMuted(false); }
@@ -541,13 +541,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, name, mimeType, f
               >
                 <VolumeIcon volume={volume} muted={muted} className="h-3.5 w-3.5" />
               </button>
-              <input
-                type="range" min={0} max={1} step={0.01}
-                value={muted ? 0 : volume}
-                onChange={onVolumeChange}
-                onClick={(e) => e.stopPropagation()}
-                className="audio-volume-slider w-16 h-1 cursor-pointer"
-              />
+              <div onClick={(e) => e.stopPropagation()}>
+                <Slider
+                  min={0} max={1} step={0.01}
+                  value={muted ? 0 : volume}
+                  onChange={onVolumeChange}
+                  className="w-16"
+                />
+              </div>
             </div>
 
             {/* Time display */}

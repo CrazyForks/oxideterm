@@ -502,7 +502,7 @@ export async function runAgent(task: AgentTask, signal: AbortSignal): Promise<vo
 
       let responseText = '';
       let thinkingContent = '';
-      const collectedToolCalls: Array<{ id: string; name: string; arguments: string }> = [];
+      const toolCallMap = new Map<string, { id: string; name: string; arguments: string }>();
 
       for await (const event of aiProvider.streamCompletion(config, trimmed, signal)) {
         if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
@@ -515,19 +515,35 @@ export async function runAgent(task: AgentTask, signal: AbortSignal): Promise<vo
             thinkingContent += event.content;
             break;
           case 'tool_call':
-            collectedToolCalls.push({ id: event.id, name: event.name, arguments: event.arguments });
+            // Incremental update — upsert by id to avoid duplicates
+            if (!event.id) break;
+            {
+              const existing = toolCallMap.get(event.id);
+              if (existing) {
+                existing.arguments = event.arguments;
+              } else {
+                toolCallMap.set(event.id, { id: event.id, name: event.name, arguments: event.arguments });
+              }
+            }
             break;
           case 'tool_call_complete':
-            // Update the tool call with complete arguments
+            // Final update with complete arguments
+            if (!event.id) break;
             {
-              const existing = collectedToolCalls.find(tc => tc.id === event.id);
-              if (existing) existing.arguments = event.arguments;
+              const existing = toolCallMap.get(event.id);
+              if (existing) {
+                existing.arguments = event.arguments;
+              } else {
+                toolCallMap.set(event.id, { id: event.id, name: event.name, arguments: event.arguments });
+              }
             }
             break;
           case 'error':
             throw new Error(event.message);
         }
       }
+
+      const collectedToolCalls = [...toolCallMap.values()];
 
       // Check if LLM returned a completion response (no tool calls)
       if (collectedToolCalls.length === 0) {

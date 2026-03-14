@@ -17,6 +17,7 @@ import {
   SkipBack, SkipForward, Disc, Terminal, Music,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { Slider } from '../ui/slider';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -160,10 +161,9 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
     if (el) { el.muted = !el.muted; setMuted(el.muted); }
   }, []);
 
-  const onVolumeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const onVolumeChange = useCallback((v: number) => {
     const el = audioRef.current;
     if (!el) return;
-    const v = Number(e.target.value);
     el.volume = v;
     setVolume(v);
     if (v > 0 && el.muted) { el.muted = false; setMuted(false); }
@@ -350,11 +350,11 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
             >
               <VolumeIcon volume={volume} muted={muted} className="h-3.5 w-3.5" />
             </button>
-            <input
-              type="range" min={0} max={1} step={0.01}
+            <Slider
+              min={0} max={1} step={0.01}
               value={muted ? 0 : volume}
               onChange={onVolumeChange}
-              className="audio-volume-slider w-16 h-1 cursor-pointer"
+              className="w-16"
             />
           </div>
 

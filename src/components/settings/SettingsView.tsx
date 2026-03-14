@@ -20,6 +20,7 @@ import {
     DialogHeader,
     DialogFooter
 } from '../ui/dialog';
+import { Slider } from '../ui/slider';
 import {
     Select,
     SelectContent,
@@ -796,13 +797,12 @@ const BackgroundImageSection = ({ terminal, updateTerminal }: BackgroundImageSec
                                 <p className="text-xs text-theme-text-muted mt-0.5">{t('settings_view.terminal.bg_opacity_hint')}</p>
                             </div>
                             <div className="flex items-center gap-2">
-                                <input
-                                    type="range"
+                                <Slider
                                     min={3}
                                     max={50}
                                     value={localOpacity}
-                                    onChange={(e) => handleOpacityChange(parseInt(e.target.value))}
-                                    className="w-28 accent-orange-500"
+                                    onChange={(v) => handleOpacityChange(v)}
+                                    className="w-28"
                                 />
                                 <span className="text-xs text-theme-text-muted w-10 text-right">
                                     {localOpacity}%
@@ -817,13 +817,12 @@ const BackgroundImageSection = ({ terminal, updateTerminal }: BackgroundImageSec
                                 <p className="text-xs text-theme-text-muted mt-0.5">{t('settings_view.terminal.bg_blur_hint')}</p>
                             </div>
                             <div className="flex items-center gap-2">
-                                <input
-                                    type="range"
+                                <Slider
                                     min={0}
                                     max={20}
                                     value={localBlur}
-                                    onChange={(e) => handleBlurChange(parseInt(e.target.value))}
-                                    className="w-28 accent-orange-500"
+                                    onChange={(v) => handleBlurChange(v)}
+                                    className="w-28"
                                 />
                                 <span className="text-xs text-theme-text-muted w-10 text-right">
                                     {localBlur}px
@@ -1299,13 +1298,12 @@ export const SettingsView = () => {
                                             <p className="text-xs text-theme-text-muted mt-0.5">{t('settings_view.terminal.font_size_hint')}</p>
                                         </div>
                                         <div className="flex items-center gap-3">
-                                            <Input
-                                                type="range"
-                                                min="8"
-                                                max="32"
-                                                step="1"
+                                            <Slider
+                                                min={8}
+                                                max={32}
+                                                step={1}
                                                 value={terminal.fontSize}
-                                                onChange={(e) => updateTerminal('fontSize', parseInt(e.target.value))}
+                                                onChange={(v) => updateTerminal('fontSize', v)}
                                                 className="w-32"
                                             />
                                             <div className="flex items-center gap-1">
@@ -1695,13 +1693,12 @@ export const SettingsView = () => {
                                                     strokeWidth={1}
                                                 />
                                             </svg>
-                                            <input
-                                                type="range"
+                                            <Slider
                                                 min={0}
                                                 max={16}
                                                 value={localBorderRadius}
-                                                onChange={(e) => handleBorderRadiusChange(parseInt(e.target.value))}
-                                                className="w-28 accent-orange-500"
+                                                onChange={(v) => handleBorderRadiusChange(v)}
+                                                className="w-28"
                                             />
                                             <span className="text-xs text-theme-text-muted w-12 text-right">
                                                 {localBorderRadius}{t('settings_view.appearance.border_radius_unit')}

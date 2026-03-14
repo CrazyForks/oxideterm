@@ -39,6 +39,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { runAgent } from '../../lib/ai/agentOrchestrator';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../ui/select';
 import type { AgentTask, AgentStep, AutonomyLevel } from '../../types';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -719,36 +720,44 @@ const ProviderModelSelect = memo(({
 
   return (
     <div className="flex items-center gap-2 text-xs">
-      <select
+      <Select
         value={providerId}
-        onChange={(e) => {
-          const p = enabledProviders.find((p) => p.id === e.target.value);
+        onValueChange={(val) => {
+          const p = enabledProviders.find((p) => p.id === val);
           onChange(
-            e.target.value,
+            val,
             p?.defaultModel || p?.models?.[0] || '',
           );
         }}
         disabled={disabled}
-        className="bg-theme-bg-hover border border-theme-border rounded-md px-2 py-1 text-theme-text text-xs focus:outline-none focus:ring-1 focus:ring-theme-accent disabled:opacity-50"
       >
-        {enabledProviders.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.name || p.type}
-          </option>
-        ))}
-      </select>
-      <select
+        <SelectTrigger className="h-7 text-xs min-w-0">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {enabledProviders.map((p) => (
+            <SelectItem key={p.id} value={p.id}>
+              {p.name || p.type}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select
         value={model}
-        onChange={(e) => onChange(providerId, e.target.value)}
+        onValueChange={(val) => onChange(providerId, val)}
         disabled={disabled || models.length === 0}
-        className="bg-theme-bg-hover border border-theme-border rounded-md px-2 py-1 text-theme-text text-xs focus:outline-none focus:ring-1 focus:ring-theme-accent disabled:opacity-50 max-w-[200px]"
       >
-        {models.map((m) => (
-          <option key={m} value={m}>
-            {m}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger className="h-7 text-xs min-w-0 max-w-[200px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {models.map((m) => (
+            <SelectItem key={m} value={m}>
+              {m}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 });
