@@ -1,6 +1,6 @@
 import { memo, useMemo, useEffect, useRef, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { RotateCcw, Pencil, Trash2, Check, X, ChevronDown, ChevronRight, ChevronLeft, Archive, MessageSquare } from 'lucide-react';
+import { RotateCcw, Pencil, Trash2, Check, X, ChevronDown, ChevronRight, ChevronLeft, Archive, MessageSquare, Copy } from 'lucide-react';
 import { emit } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import type { AiChatMessage } from '../../types';
@@ -80,6 +80,7 @@ export const ChatMessage = memo(function ChatMessage({
   const contentRef = useRef<HTMLDivElement>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState('');
+  const [copied, setCopied] = useState(false);
   const editTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Inject styles on mount
@@ -371,6 +372,25 @@ export const ChatMessage = memo(function ChatMessage({
               >
                 <Pencil className="w-3 h-3" />
                 <span>{t('ai.message.edit')}</span>
+              </button>
+            )}
+
+            {/* Copy button — assistant messages only */}
+            {!isUser && (
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(message.content).then(() => {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  });
+                }}
+                className="flex items-center gap-1 text-[11px] text-theme-text-muted/40 
+                  hover:text-theme-text-muted py-0.5 px-1.5
+                  hover:bg-theme-border/10 opacity-0 group-hover/msg:opacity-100 transition-opacity"
+                title={t('ai.message.copy')}
+              >
+                {copied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                <span>{copied ? t('ai.message.copied') : t('ai.message.copy')}</span>
               </button>
             )}
 

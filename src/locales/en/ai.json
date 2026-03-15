@@ -66,7 +66,9 @@
       "delete": "Delete",
       "delete_confirm": "Delete this message?",
       "edit_failed": "Failed to edit message: could not clear history on backend.",
-      "delete_failed": "Failed to delete message: backend error."
+      "delete_failed": "Failed to delete message: backend error.",
+      "copy": "Copy response",
+      "copied": "Copied!"
     },
     "thinking": {
       "thinking": "Thinking...",

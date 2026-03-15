@@ -66,7 +66,9 @@
       "delete": "Eliminar",
       "delete_confirm": "¿Eliminar este mensaje?",
       "edit_failed": "Error al editar el mensaje: no se pudo borrar el historial en el backend.",
-      "delete_failed": "Error al eliminar el mensaje: error de backend."
+      "delete_failed": "Error al eliminar el mensaje: error de backend.",
+      "copy": "Copiar respuesta",
+      "copied": "¡Copiado!"
     },
     "thinking": {
       "thinking": "Pensando...",

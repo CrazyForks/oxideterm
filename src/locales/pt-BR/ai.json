@@ -66,7 +66,9 @@
       "delete": "Excluir",
       "delete_confirm": "Excluir esta mensagem?",
       "edit_failed": "Falha ao editar mensagem: não foi possível limpar o histórico no backend.",
-      "delete_failed": "Falha ao excluir mensagem: erro de backend."
+      "delete_failed": "Falha ao excluir mensagem: erro de backend.",
+      "copy": "Copiar resposta",
+      "copied": "Copiado!"
     },
     "thinking": {
       "thinking": "Pensando...",

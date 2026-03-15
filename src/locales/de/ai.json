@@ -66,7 +66,9 @@
       "delete": "Löschen",
       "delete_confirm": "Diese Nachricht löschen?",
       "edit_failed": "Nachricht bearbeiten fehlgeschlagen: Verlauf konnte nicht im Backend gelöscht werden.",
-      "delete_failed": "Nachricht löschen fehlgeschlagen: Backend-Fehler."
+      "delete_failed": "Nachricht löschen fehlgeschlagen: Backend-Fehler.",
+      "copy": "Antwort kopieren",
+      "copied": "Kopiert!"
     },
     "thinking": {
       "thinking": "Denkt nach...",

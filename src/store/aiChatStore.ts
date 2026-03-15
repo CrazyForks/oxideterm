@@ -12,9 +12,9 @@ import type { AiChatMessage, AiConversation, AiToolCall } from '../types';
 import { DEFAULT_SYSTEM_PROMPT, SUGGESTIONS_INSTRUCTION, COMPACTION_TRIGGER_THRESHOLD } from '../lib/ai/constants';
 import { CONTEXT_FREE_TOOLS, SESSION_ID_TOOLS, getToolsForContext, isCommandDenied, executeTool, type ToolExecutionContext } from '../lib/ai/tools';
 import { parseUserInput } from '../lib/ai/inputParser';
-import { resolveSlashCommand } from '../lib/ai/slashCommands';
-import { resolveParticipant, mergeParticipantTools } from '../lib/ai/participants';
-import { resolveReferenceType, resolveAllReferences } from '../lib/ai/references';
+import { resolveSlashCommand, SLASH_COMMANDS } from '../lib/ai/slashCommands';
+import { PARTICIPANTS, resolveParticipant, mergeParticipantTools } from '../lib/ai/participants';
+import { REFERENCES, resolveReferenceType, resolveAllReferences } from '../lib/ai/references';
 import { parseSuggestions } from '../lib/ai/suggestionParser';
 import { detectIntent } from '../lib/ai/intentDetector';
 import i18n from '../i18n';
@@ -567,7 +567,46 @@ export const useAiChatStore = create<AiChatStore>()((set, get) => ({
           }
           return;
         }
-        // /help and /tools just pass through as normal messages
+        if (slashDef.name === 'help') {
+          const convId = activeConversationId || (await createConversation());
+          const userMsg: AiChatMessage = { id: generateId(), role: 'user', content, timestamp: Date.now() };
+          await _addMessage(convId, userMsg);
+
+          const t = i18n.t.bind(i18n);
+          const cmdLines = SLASH_COMMANDS.map(c => `- \`/${c.name}\` — ${t(c.descriptionKey)}`).join('\n');
+          const partLines = PARTICIPANTS.map(p => `- \`@${p.name}\` — ${t(p.descriptionKey)}`).join('\n');
+          const refLines = REFERENCES.map(r => `- \`#${r.type}\` — ${t(r.descriptionKey)}`).join('\n');
+          const body = `### ${t('ai.slash.help')}\n\n**/${t('ai.slash.help')}** — Slash Commands\n${cmdLines}\n\n**@** — Participants\n${partLines}\n\n**#** — References\n${refLines}`;
+          const assistantMsg: AiChatMessage = { id: generateId(), role: 'assistant', content: body, timestamp: Date.now() };
+          await _addMessage(convId, assistantMsg);
+          return;
+        }
+        if (slashDef.name === 'tools') {
+          const convId = activeConversationId || (await createConversation());
+          const userMsg: AiChatMessage = { id: generateId(), role: 'user', content, timestamp: Date.now() };
+          await _addMessage(convId, userMsg);
+
+          const aiSettings = useSettingsStore.getState().settings.ai;
+          const toolUseEnabled = aiSettings.toolUse?.enabled === true;
+          if (!toolUseEnabled) {
+            const assistantMsg: AiChatMessage = { id: generateId(), role: 'assistant', content: '⚠️ Tool Use is disabled. Enable it in Settings → AI → Tool Use.', timestamp: Date.now() };
+            await _addMessage(convId, assistantMsg);
+            return;
+          }
+          const sidebarCtx = await gatherSidebarContext();
+          const activeTabType = sidebarCtx?.env.activeTabType ?? null;
+          const nodes = useSessionTreeStore.getState().nodes;
+          const hasAnySSH = nodes.some(n => n.runtime?.status === 'connected' || n.runtime?.status === 'active' || n.runtime?.connectionId);
+          const effectiveDisabled = get().getEffectiveDisabledTools();
+          const tools = getToolsForContext(activeTabType, hasAnySSH, effectiveDisabled);
+          const toolLines = tools.map(t => `- \`${t.name}\` — ${t.description.slice(0, 80)}`).join('\n');
+          const body = `### /tools\n\n**${tools.length}** tools available:\n\n${toolLines}`;
+          const assistantMsg: AiChatMessage = { id: generateId(), role: 'assistant', content: body, timestamp: Date.now() };
+          await _addMessage(convId, assistantMsg);
+          return;
+        }
+        // Unknown client-only command — silently ignore
+        return;
       }
     }
 

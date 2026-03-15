@@ -66,7 +66,9 @@
       "delete": "삭제",
       "delete_confirm": "이 메시지를 삭제하시겠습니까?",
       "edit_failed": "메시지 편집 실패: 백엔드 기록을 지울 수 없습니다.",
-      "delete_failed": "메시지 삭제 실패: 백엔드 오류."
+      "delete_failed": "메시지 삭제 실패: 백엔드 오류.",
+      "copy": "응답 복사",
+      "copied": "복사됨"
     },
     "thinking": {
       "thinking": "생각 중...",

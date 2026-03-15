@@ -66,7 +66,9 @@
       "delete": "删除",
       "delete_confirm": "删除此消息？",
       "edit_failed": "消息编辑失败：无法清除后端历史记录。",
-      "delete_failed": "消息删除失败：后端错误。"
+      "delete_failed": "消息删除失败：后端错误。",
+      "copy": "复制回复",
+      "copied": "已复制"
     },
     "thinking": {
       "thinking": "思考中...",
