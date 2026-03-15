@@ -16,7 +16,8 @@
       "start": "Inizia"
     },
     "plan": {
-      "title": "Piano"
+      "title": "Piano",
+      "skip_step": "Salta"
     },
     "step": {
       "plan": "Pianificazione",
@@ -67,7 +68,8 @@
       "rerun": "Riesegui",
       "delete": "Elimina",
       "clear": "Cancella tutto",
-      "rounds": "{{count}} turni"
+      "rounds": "{{count}} turni",
+      "resume": "Riprendi attività"
     },
     "toast": {
       "task_completed": "Compito dell'agente completato",

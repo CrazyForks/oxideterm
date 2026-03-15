@@ -1484,10 +1484,18 @@ export type AgentTaskStatus =
 export type AgentPlan = {
   /** High-level description of the approach */
   description: string;
-  /** Ordered list of planned steps (natural language) */
-  steps: string[];
+  /** Ordered list of planned steps */
+  steps: AgentPlanStep[];
   /** Index of the step currently being executed */
   currentStepIndex: number;
+};
+
+/** A single planned step with its execution status */
+export type AgentPlanStep = {
+  /** Step description (natural language) */
+  description: string;
+  /** Step status */
+  status: 'pending' | 'completed' | 'skipped';
 };
 
 /** A single step in agent execution history */
@@ -1546,6 +1554,10 @@ export type AgentTask = {
   error: string | null;
   /** Tab type at task creation time — determines which tab-specific tools are available */
   contextTabType?: TabType | null;
+  /** If this task was resumed from a previous task, the round to resume from */
+  resumeFromRound?: number;
+  /** ID of the parent task this was resumed from */
+  parentTaskId?: string;
 };
 
 /** A pending approval request for the agent */

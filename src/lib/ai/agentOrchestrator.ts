@@ -24,7 +24,7 @@ import { api } from '../api';
 import i18n from '../../i18n';
 import { useToastStore } from '../../hooks/useToast';
 import type { ChatMessage } from './providers';
-import type { AgentTask, AgentStep, AgentApproval, AiToolResult } from '../../types';
+import type { AgentTask, AgentStep, AgentApproval, AgentPlanStep, AiToolResult } from '../../types';
 import type { ToolExecutionContext } from './tools';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -199,10 +199,62 @@ function createStep(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Helper: Rebuild LLM messages from prior agent steps (for task resume)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function rebuildMessagesFromSteps(messages: ChatMessage[], steps: AgentStep[]): void {
+  // Group steps by round for correct message ordering
+  const roundMap = new Map<number, AgentStep[]>();
+  for (const step of steps) {
+    const arr = roundMap.get(step.roundIndex) ?? [];
+    arr.push(step);
+    roundMap.set(step.roundIndex, arr);
+  }
+
+  const sortedRounds = [...roundMap.keys()].sort((a, b) => a - b);
+  for (const roundIdx of sortedRounds) {
+    const roundSteps = roundMap.get(roundIdx)!;
+    for (const step of roundSteps) {
+      switch (step.type) {
+        case 'plan':
+        case 'decision':
+          // Assistant text response
+          messages.push({ role: 'assistant', content: step.content });
+          break;
+        case 'tool_call':
+          // If this step has a tool result, emit assistant+tool_calls then tool response
+          if (step.toolCall?.result) {
+            messages.push({
+              role: 'assistant',
+              content: '',
+              tool_calls: [{
+                id: step.toolCall.result.toolCallId,
+                name: step.toolCall.name,
+                arguments: step.toolCall.arguments,
+              }],
+            });
+            const output = step.toolCall.result.success
+              ? step.toolCall.result.output.slice(0, MAX_OUTPUT_BYTES)
+              : `Error: ${step.toolCall.result.error}`;
+            messages.push({
+              role: 'tool',
+              content: output,
+              tool_call_id: step.toolCall.result.toolCallId,
+              tool_name: step.toolCall.name,
+            });
+          }
+          break;
+        // observation, error, user_input, verify — skip (already captured in tool results)
+      }
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Helper: Parse plan from LLM response
 // ═══════════════════════════════════════════════════════════════════════════
 
-function parsePlan(text: string): { description: string; steps: string[] } | null {
+function parsePlan(text: string): { description: string; steps: AgentPlanStep[] } | null {
   // Try to extract JSON plan from the response
   const jsonMatch = text.match(/```json\s*([\s\S]*?)```/);
   if (jsonMatch) {
@@ -211,7 +263,10 @@ function parsePlan(text: string): { description: string; steps: string[] } | nul
       if (parsed.plan?.steps && Array.isArray(parsed.plan.steps)) {
         return {
           description: parsed.plan.description || '',
-          steps: parsed.plan.steps,
+          steps: parsed.plan.steps.map((s: unknown) => ({
+            description: typeof s === 'string' ? s : String(s),
+            status: 'pending' as const,
+          })),
         };
       }
     } catch { /* fallthrough */ }
@@ -221,7 +276,13 @@ function parsePlan(text: string): { description: string; steps: string[] } | nul
   try {
     const parsed = JSON.parse(text);
     if (parsed.plan?.steps && Array.isArray(parsed.plan.steps)) {
-      return { description: parsed.plan.description || '', steps: parsed.plan.steps };
+      return {
+        description: parsed.plan.description || '',
+        steps: parsed.plan.steps.map((s: unknown) => ({
+          description: typeof s === 'string' ? s : String(s),
+          status: 'pending' as const,
+        })),
+      };
     }
   } catch { /* fallthrough */ }
 
@@ -374,7 +435,6 @@ export async function runAgent(task: AgentTask, signal: AbortSignal): Promise<vo
     // ── Conversation history for LLM ─────────────────────────────────────
     const messages: ChatMessage[] = [];
 
-    // ── Phase 1: Planning ────────────────────────────────────────────────
     // Snapshot CWD at task creation, so it won't drift if user switches panes
     const cwd = getActiveCwd();
 
@@ -391,70 +451,90 @@ export async function runAgent(task: AgentTask, signal: AbortSignal): Promise<vo
     messages.push({ role: 'system', content: systemPrompt });
     messages.push({ role: 'user', content: `Task: ${task.goal}` });
 
-    // Stream planning response
-    const planStep = createStep(0, 'plan', '');
-    store().appendStep(planStep);
-    store().updateStep(planStep.id, { status: 'running' });
+    // ── Resume Path: rebuild messages from prior steps ────────────────────
+    let startRound = 0;
+    if (task.resumeFromRound != null && task.steps.length > 0) {
+      // Rebuild LLM conversation from the preserved steps
+      rebuildMessagesFromSteps(messages, task.steps);
 
-    let planText = '';
-    let planThinking = '';
-    const planConfig = {
-      baseUrl: provider.baseUrl,
-      model: task.model,
-      apiKey,
-      tools,
-    };
-
-    try {
-      for await (const event of aiProvider.streamCompletion(planConfig, messages, signal)) {
-        if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
-        if (event.type === 'content') {
-          planText += event.content;
-        }
-        if (event.type === 'thinking') {
-          planThinking += event.content;
-        }
-        if (event.type === 'error') {
-          throw new Error(event.message);
-        }
+      // Inform LLM we're resuming
+      const skippedStepDescs = task.plan?.steps
+        .filter(s => s.status === 'skipped')
+        .map(s => s.description) ?? [];
+      let resumeNote = `\n\n[System: This task is being resumed from round ${task.resumeFromRound}. Continue executing the remaining plan steps.]`;
+      if (skippedStepDescs.length > 0) {
+        resumeNote += `\n[The user has skipped these steps — do NOT execute them: ${skippedStepDescs.join('; ')}]`;
       }
-    } catch (planErr) {
-      // Ensure plan step is marked as error on failure
+      messages.push({ role: 'user', content: resumeNote });
+
+      startRound = task.resumeFromRound;
+      store().setTaskStatus('executing');
+    } else {
+      // ── Phase 1: Planning (normal path) ────────────────────────────────
+      const planStep = createStep(0, 'plan', '');
+      store().appendStep(planStep);
+      store().updateStep(planStep.id, { status: 'running' });
+
+      let planText = '';
+      let planThinking = '';
+      const planConfig = {
+        baseUrl: provider.baseUrl,
+        model: task.model,
+        apiKey,
+        tools,
+      };
+
+      try {
+        for await (const event of aiProvider.streamCompletion(planConfig, messages, signal)) {
+          if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+          if (event.type === 'content') {
+            planText += event.content;
+          }
+          if (event.type === 'thinking') {
+            planThinking += event.content;
+          }
+          if (event.type === 'error') {
+            throw new Error(event.message);
+          }
+        }
+      } catch (planErr) {
+        // Ensure plan step is marked as error on failure
+        store().updateStep(planStep.id, {
+          status: 'error',
+          content: planText || (planErr instanceof Error ? planErr.message : String(planErr)),
+          durationMs: Date.now() - planStep.timestamp,
+        });
+        throw planErr;
+      }
+
+      // Parse plan
+      const parsedPlan = parsePlan(planText);
+      if (parsedPlan) {
+        store().setPlan({
+          description: parsedPlan.description,
+          steps: parsedPlan.steps,
+          currentStepIndex: 0,
+        });
+      }
+
       store().updateStep(planStep.id, {
-        status: 'error',
-        content: planText || (planErr instanceof Error ? planErr.message : String(planErr)),
+        content: planText,
+        status: 'completed',
         durationMs: Date.now() - planStep.timestamp,
       });
-      throw planErr;
-    }
 
-    // Parse plan
-    const parsedPlan = parsePlan(planText);
-    if (parsedPlan) {
-      store().setPlan({
-        description: parsedPlan.description,
-        steps: parsedPlan.steps,
-        currentStepIndex: 0,
-      });
+      // Include reasoning_content for thinking models (Kimi K2.5, DeepSeek-R1)
+      const planAssistantMsg: ChatMessage = { role: 'assistant', content: planText };
+      if (planThinking) {
+        planAssistantMsg.reasoning_content = planThinking;
+      }
+      messages.push(planAssistantMsg);
+      store().setTaskStatus('executing');
     }
-
-    store().updateStep(planStep.id, {
-      content: planText,
-      status: 'completed',
-      durationMs: Date.now() - planStep.timestamp,
-    });
-
-    // Include reasoning_content for thinking models (Kimi K2.5, DeepSeek-R1)
-    const planAssistantMsg: ChatMessage = { role: 'assistant', content: planText };
-    if (planThinking) {
-      planAssistantMsg.reasoning_content = planThinking;
-    }
-    messages.push(planAssistantMsg);
-    store().setTaskStatus('executing');
 
     // ── Phase 2: Execution Loop ──────────────────────────────────────────
     let emptyRoundCount = 0;
-    for (let round = 0; round < task.maxRounds; round++) {
+    for (let round = startRound; round < task.maxRounds; round++) {
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
       // Wait if paused (with 30-minute safety timeout, decoupled from poll loop)

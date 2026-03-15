@@ -16,7 +16,8 @@
       "start": "Iniciar"
     },
     "plan": {
-      "title": "Plano"
+      "title": "Plano",
+      "skip_step": "Pular"
     },
     "step": {
       "plan": "Planejamento",
@@ -67,7 +68,8 @@
       "rerun": "Reexecutar",
       "delete": "Excluir",
       "clear": "Limpar tudo",
-      "rounds": "{{count}} rodadas"
+      "rounds": "{{count}} rodadas",
+      "resume": "Retomar tarefa"
     },
     "toast": {
       "task_completed": "Tarefa do agente concluída",

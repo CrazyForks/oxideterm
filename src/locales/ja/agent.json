@@ -16,7 +16,8 @@
       "start": "開始"
     },
     "plan": {
-      "title": "プラン"
+      "title": "プラン",
+      "skip_step": "スキップ"
     },
     "step": {
       "plan": "計画",
@@ -67,7 +68,8 @@
       "rerun": "再実行",
       "delete": "削除",
       "clear": "すべてクリア",
-      "rounds": "{{count}} ラウンド"
+      "rounds": "{{count}} ラウンド",
+      "resume": "タスクを再開"
     },
     "toast": {
       "task_completed": "エージェントタスク完了",

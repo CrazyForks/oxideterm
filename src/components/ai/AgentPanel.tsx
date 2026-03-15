@@ -32,6 +32,7 @@ import {
   Trash2,
   Eye,
   ArrowLeft,
+  FastForward,
 } from 'lucide-react';
 import { useAgentStore } from '../../store/agentStore';
 import { useAppStore } from '../../store/appStore';
@@ -167,13 +168,15 @@ TaskInput.displayName = 'TaskInput';
 // Plan View
 // ═══════════════════════════════════════════════════════════════════════════
 
-const PlanView = memo(({ task }: { task: AgentTask }) => {
+const PlanView = memo(({ task, allowSkip }: { task: AgentTask; allowSkip?: boolean }) => {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(true);
+  const skipPlanStep = useAgentStore((s) => s.skipPlanStep);
 
   if (!task.plan) return null;
 
   const { steps, currentStepIndex } = task.plan;
+  const isPaused = task.status === 'paused';
 
   return (
     <div className="border border-theme-border rounded-lg overflow-hidden">
@@ -195,20 +198,25 @@ const PlanView = memo(({ task }: { task: AgentTask }) => {
       {expanded && (
         <div className="px-3 py-2 space-y-1">
           {steps.map((step, i) => {
-            const done = i < currentStepIndex;
-            const active = i === currentStepIndex;
+            const isSkipped = step.status === 'skipped';
+            const done = step.status === 'completed' || i < currentStepIndex;
+            const active = i === currentStepIndex && !isSkipped;
+            const canSkip = allowSkip && isPaused && !done && !isSkipped && i >= currentStepIndex;
             return (
               <div
                 key={i}
                 className={cn(
                   'flex items-start gap-2 text-xs py-1',
-                  done && 'text-theme-text-muted line-through',
-                  active && 'text-theme-text font-medium',
-                  !done && !active && 'text-theme-text-muted',
+                  isSkipped && 'text-zinc-500 line-through',
+                  !isSkipped && done && 'text-theme-text-muted line-through',
+                  !isSkipped && active && 'text-theme-text font-medium',
+                  !isSkipped && !done && !active && 'text-theme-text-muted',
                 )}
               >
                 <span className="mt-0.5">
-                  {done ? (
+                  {isSkipped ? (
+                    <X className="w-3.5 h-3.5 text-zinc-500" />
+                  ) : done ? (
                     <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
                   ) : active ? (
                     <Loader2 className="w-3.5 h-3.5 text-theme-accent animate-spin" />
@@ -216,7 +224,16 @@ const PlanView = memo(({ task }: { task: AgentTask }) => {
                     <span className="inline-block w-3.5 h-3.5 rounded-full border border-current" />
                   )}
                 </span>
-                <span>{step}</span>
+                <span className="flex-1">{step.description}</span>
+                {canSkip && (
+                  <button
+                    onClick={() => skipPlanStep(i)}
+                    className="text-[10px] text-zinc-400 hover:text-zinc-300 flex-shrink-0"
+                    title={t('agent.plan.skip_step')}
+                  >
+                    {t('agent.plan.skip_step')}
+                  </button>
+                )}
               </div>
             );
           })}
@@ -561,7 +578,7 @@ TaskSummary.displayName = 'TaskSummary';
 // Task History
 // ═══════════════════════════════════════════════════════════════════════════
 
-const TaskHistory = memo(({ onRerun }: { onRerun: (goal: string) => void }) => {
+const TaskHistory = memo(({ onRerun, onResume }: { onRerun: (goal: string) => void; onResume: (taskId: string, fromRound?: number) => void }) => {
   const { t } = useTranslation();
   const taskHistory = useAgentStore((s) => s.taskHistory);
   const viewingTask = useAgentStore((s) => s.viewingTask);
@@ -607,17 +624,34 @@ const TaskHistory = memo(({ onRerun }: { onRerun: (goal: string) => void }) => {
         {viewingTask.plan && <PlanView task={viewingTask} />}
         <StepLog steps={viewingTask.steps} />
         {!isRunning && (
-          <button
-            onClick={() => {
-              if (useAgentStore.getState().isRunning) return;
-              setViewingTask(null);
-              onRerun(viewingTask.goal);
-            }}
-            className="mt-2 flex items-center gap-1.5 text-xs text-theme-accent hover:text-theme-accent-hover transition-colors"
-          >
-            <RotateCcw className="w-3 h-3" />
-            {t('agent.history.rerun')}
-          </button>
+          <div className="mt-2 flex items-center gap-3">
+            <button
+              onClick={() => {
+                if (useAgentStore.getState().isRunning) return;
+                setViewingTask(null);
+                onRerun(viewingTask.goal);
+              }}
+              className="flex items-center gap-1.5 text-xs text-theme-accent hover:text-theme-accent-hover transition-colors"
+              aria-label={t('agent.history.rerun')}
+            >
+              <RotateCcw className="w-3 h-3" />
+              {t('agent.history.rerun')}
+            </button>
+            {(viewingTask.status === 'failed' || viewingTask.status === 'cancelled') && viewingTask.steps.length > 0 && (
+              <button
+                onClick={() => {
+                  if (useAgentStore.getState().isRunning) return;
+                  setViewingTask(null);
+                  onResume(viewingTask.id);
+                }}
+                className="flex items-center gap-1.5 text-xs text-theme-accent hover:text-theme-accent-hover transition-colors"
+                aria-label={t('agent.history.resume')}
+              >
+                <FastForward className="w-3 h-3" />
+                {t('agent.history.resume')}
+              </button>
+            )}
+          </div>
         )}
       </div>
     );
@@ -824,6 +858,25 @@ export const AgentPanel = () => {
     [providerId, model, startTask],
   );
 
+  const handleResume = useCallback(
+    (taskId: string, fromRound?: number) => {
+      if (useAgentStore.getState().isRunning) return;
+      const resumeHistoryTask = useAgentStore.getState().resumeHistoryTask;
+      const newTask = resumeHistoryTask(taskId, fromRound);
+      if (!newTask) return;
+      const controller = useAgentStore.getState().abortController;
+      if (controller) {
+        runAgent(newTask, controller.signal).catch((err) => {
+          if (err instanceof DOMException && err.name === 'AbortError') return;
+          useAgentStore.getState().setTaskError(
+            err instanceof Error ? err.message : String(err),
+          );
+        });
+      }
+    },
+    [],
+  );
+
   return (
     <div className="flex flex-col h-full bg-theme-bg">
       {/* Header */}
@@ -849,10 +902,10 @@ export const AgentPanel = () => {
 
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-        {activeTask && <PlanView task={activeTask} />}
+        {activeTask && <PlanView task={activeTask} allowSkip />}
         <StepLog steps={activeTask?.steps ?? []} />
         {activeTask && <TaskSummary task={activeTask} />}
-        <TaskHistory onRerun={handleStart} />
+        <TaskHistory onRerun={handleStart} onResume={handleResume} />
       </div>
 
       {/* Footer */}

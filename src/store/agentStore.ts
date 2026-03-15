@@ -48,6 +48,8 @@ interface AgentStore {
   resumeTask: () => void;
   /** Cancel the current task */
   cancelTask: () => void;
+  /** Resume a historical task from a given round (creates a new task with prior context) */
+  resumeHistoryTask: (taskId: string, fromRound?: number) => AgentTask | null;
 
   // ─── Settings ───────────────────────────────────────────────────────────
   /** Set default autonomy level */
@@ -62,6 +64,8 @@ interface AgentStore {
   setPlan: (plan: AgentPlan) => void;
   /** Update plan's current step index */
   advancePlanStep: () => void;
+  /** Skip a plan step at given index (mark as 'skipped') */
+  skipPlanStep: (stepIndex: number) => void;
   /** Set task status */
   setTaskStatus: (status: AgentTaskStatus) => void;
   /** Set task summary */
@@ -237,6 +241,86 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     clearApprovalResolvers();
   },
 
+  resumeHistoryTask: (taskId, fromRound) => {
+    const current = get();
+    // Find the task in history
+    const sourceTask = current.taskHistory.find(t => t.id === taskId)
+      || (current.activeTask?.id === taskId ? current.activeTask : null);
+    if (!sourceTask) return null;
+
+    // Cancel any running task first
+    if (current.isRunning && current.abortController) {
+      current.abortController.abort();
+    }
+    clearApprovalResolvers();
+
+    // Archive current active task if exists
+    if (current.activeTask && current.activeTask.id !== taskId) {
+      const taskToArchive = (current.activeTask.status === 'executing' || current.activeTask.status === 'planning')
+        ? { ...current.activeTask, status: 'cancelled' as const, completedAt: Date.now() }
+        : current.activeTask;
+      set((s) => ({
+        taskHistory: [taskToArchive, ...s.taskHistory].slice(0, 50),
+      }));
+      api.agentHistorySave(taskToArchive.id, JSON.stringify(taskToArchive)).catch((e) => {
+        console.warn('[AgentStore] Failed to persist archived task:', e);
+      });
+    }
+
+    // Determine resume point
+    const resumeRound = fromRound ?? (() => {
+      // Default: find the last completed step's round
+      for (let i = sourceTask.steps.length - 1; i >= 0; i--) {
+        if (sourceTask.steps[i].status === 'completed') {
+          return sourceTask.steps[i].roundIndex;
+        }
+      }
+      return 0;
+    })();
+
+    // Truncate steps to the resume point
+    const keptSteps = sourceTask.steps.filter(s => s.roundIndex < resumeRound);
+
+    const autonomyLevel = current.autonomyLevel;
+    const newTask: AgentTask = {
+      id: crypto.randomUUID(),
+      goal: sourceTask.goal,
+      status: 'planning',
+      autonomyLevel,
+      providerId: sourceTask.providerId,
+      model: sourceTask.model,
+      plan: sourceTask.plan ? {
+        ...sourceTask.plan,
+        // Keep existing step statuses but reset pending steps after resume point
+        steps: sourceTask.plan.steps.map((s, i) =>
+          i < sourceTask.plan!.currentStepIndex ? s : { ...s, status: s.status === 'skipped' ? 'skipped' as const : 'pending' as const }
+        ),
+      } : null,
+      steps: keptSteps,
+      currentRound: resumeRound,
+      maxRounds: MAX_ROUNDS[autonomyLevel],
+      createdAt: Date.now(),
+      completedAt: null,
+      summary: null,
+      error: null,
+      contextTabType: sourceTask.contextTabType,
+      resumeFromRound: resumeRound,
+      parentTaskId: sourceTask.id,
+    };
+
+    const abortController = new AbortController();
+
+    set({
+      activeTask: newTask,
+      isRunning: true,
+      pendingApprovals: [],
+      abortController,
+      viewingTask: null,
+    });
+
+    return newTask;
+  },
+
   // ─── Settings ───────────────────────────────────────────────────────────
 
   setAutonomyLevel: (level) => set({ autonomyLevel: level }),
@@ -291,13 +375,38 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   advancePlanStep: () => {
     set((s) => {
       if (!s.activeTask?.plan) return s;
+      const plan = s.activeTask.plan;
+      const newSteps = plan.steps.slice();
+      // Mark current step as completed
+      if (plan.currentStepIndex < newSteps.length) {
+        newSteps[plan.currentStepIndex] = { ...newSteps[plan.currentStepIndex], status: 'completed' };
+      }
+      // Advance past any skipped steps
+      let nextIndex = plan.currentStepIndex + 1;
+      while (nextIndex < newSteps.length && newSteps[nextIndex].status === 'skipped') {
+        nextIndex++;
+      }
       return {
         activeTask: {
           ...s.activeTask,
-          plan: {
-            ...s.activeTask.plan,
-            currentStepIndex: s.activeTask.plan.currentStepIndex + 1,
-          },
+          plan: { ...plan, steps: newSteps, currentStepIndex: nextIndex },
+        },
+      };
+    });
+  },
+
+  skipPlanStep: (stepIndex) => {
+    set((s) => {
+      if (!s.activeTask?.plan) return s;
+      const plan = s.activeTask.plan;
+      if (stepIndex < 0 || stepIndex >= plan.steps.length) return s;
+      if (plan.steps[stepIndex].status !== 'pending') return s;
+      const newSteps = plan.steps.slice();
+      newSteps[stepIndex] = { ...newSteps[stepIndex], status: 'skipped' };
+      return {
+        activeTask: {
+          ...s.activeTask,
+          plan: { ...plan, steps: newSteps },
         },
       };
     });

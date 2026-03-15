@@ -16,7 +16,8 @@
       "start": "開始"
     },
     "plan": {
-      "title": "計劃"
+      "title": "計劃",
+      "skip_step": "跳過"
     },
     "step": {
       "plan": "規劃",
@@ -67,7 +68,8 @@
       "rerun": "重新執行",
       "delete": "刪除",
       "clear": "清除全部",
-      "rounds": "{{count}} 輪"
+      "rounds": "{{count}} 輪",
+      "resume": "恢復任務"
     },
     "toast": {
       "task_completed": "Agent 任務已完成",

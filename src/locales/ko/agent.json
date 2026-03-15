@@ -16,7 +16,8 @@
       "start": "시작"
     },
     "plan": {
-      "title": "계획"
+      "title": "계획",
+      "skip_step": "건너뛰기"
     },
     "step": {
       "plan": "계획",
@@ -67,7 +68,8 @@
       "rerun": "다시 실행",
       "delete": "삭제",
       "clear": "모두 지우기",
-      "rounds": "{{count}} 라운드"
+      "rounds": "{{count}} 라운드",
+      "resume": "작업 재개"
     },
     "toast": {
       "task_completed": "에이전트 작업 완료",

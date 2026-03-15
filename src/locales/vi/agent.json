@@ -16,7 +16,8 @@
       "start": "Bắt đầu"
     },
     "plan": {
-      "title": "Kế hoạch"
+      "title": "Kế hoạch",
+      "skip_step": "Bỏ qua"
     },
     "step": {
       "plan": "Lập kế hoạch",
@@ -67,7 +68,8 @@
       "rerun": "Chạy lại",
       "delete": "Xóa",
       "clear": "Xóa tất cả",
-      "rounds": "{{count}} vòng"
+      "rounds": "{{count}} vòng",
+      "resume": "Tiếp tục tác vụ"
     },
     "toast": {
       "task_completed": "Nhiệm vụ đại lý hoàn thành",

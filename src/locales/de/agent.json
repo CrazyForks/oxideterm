@@ -16,7 +16,8 @@
       "start": "Starten"
     },
     "plan": {
-      "title": "Plan"
+      "title": "Plan",
+      "skip_step": "Überspringen"
     },
     "step": {
       "plan": "Planung",
@@ -67,7 +68,8 @@
       "rerun": "Erneut ausführen",
       "delete": "Löschen",
       "clear": "Alles löschen",
-      "rounds": "{{count}} Runden"
+      "rounds": "{{count}} Runden",
+      "resume": "Aufgabe fortsetzen"
     },
     "toast": {
       "task_completed": "Agent-Aufgabe abgeschlossen",
