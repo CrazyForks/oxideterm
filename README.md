@@ -19,13 +19,13 @@
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> | <a href="docs/readme/README.zh-CN.md">简体中文</a> | <a href="docs/readme/README.zh-Hant.md">繁體中文</a> | <a href="docs/readme/README.ja.md">日本語</a> | <a href="docs/readme/README.ko.md">한국어</a> | <a href="docs/readme/README.fr.md">Français</a> | <a href="docs/readme/README.vi.md">Tiếng Việt</a>
+  <a href="README.md">English</a> | <a href="docs/readme/README.zh-Hans.md">简体中文</a> | <a href="docs/readme/README.zh-Hant.md">繁體中文</a> | <a href="docs/readme/README.ja.md">日本語</a> | <a href="docs/readme/README.ko.md">한국어</a> | <a href="docs/readme/README.fr.md">Français</a> | <a href="docs/readme/README.vi.md">Tiếng Việt</a>
 </p>
 
 ---
 
 <p align="center">
-  <img src="docs/screenshots/overview.png" alt="OxideTerm Overview" width="800">
+  <img src="docs/screenshots/overview/en.png" alt="OxideTerm Overview" width="800">
 </p>
 
 ## What Is OxideTerm?
@@ -363,6 +363,33 @@ Project-wide file content search with intelligent caching:
 - **11 Languages**: English, 简体中文, 繁體中文, 日本語, Français, Deutsch, Español, Italiano, 한국어, Português, Tiếng Việt.
 - **Dynamic loading**: on-demand language packs via i18next.
 - **Type-safe**: TypeScript definitions for all translation keys.
+
+<details>
+<summary>📸 All 11 languages in action</summary>
+<br>
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/overview/en.png" width="280"><br><b>English</b></td>
+    <td align="center"><img src="docs/screenshots/overview/zhHans.png" width="280"><br><b>简体中文</b></td>
+    <td align="center"><img src="docs/screenshots/overview/zhHant.png" width="280"><br><b>繁體中文</b></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/overview/ja.png" width="280"><br><b>日本語</b></td>
+    <td align="center"><img src="docs/screenshots/overview/ko.png" width="280"><br><b>한국어</b></td>
+    <td align="center"><img src="docs/screenshots/overview/fr.png" width="280"><br><b>Français</b></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/overview/de.png" width="280"><br><b>Deutsch</b></td>
+    <td align="center"><img src="docs/screenshots/overview/es.png" width="280"><br><b>Español</b></td>
+    <td align="center"><img src="docs/screenshots/overview/it.png" width="280"><br><b>Italiano</b></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/overview/pt-BR.png" width="280"><br><b>Português</b></td>
+    <td align="center"><img src="docs/screenshots/overview/vi.png" width="280"><br><b>Tiếng Việt</b></td>
+    <td></td>
+  </tr>
+</table>
+</details>
 
 ### 🌐 Network Optimization
 - **Dual-plane architecture**: data plane (WebSocket direct) and control plane (Tauri IPC) separated.

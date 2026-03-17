@@ -24,7 +24,7 @@ const FILES = {
   cargoToml: path.join(ROOT_DIR, 'src-tauri', 'Cargo.toml'),
   tauriConf: path.join(ROOT_DIR, 'src-tauri', 'tauri.conf.json'),
   readme: path.join(ROOT_DIR, 'README.md'),
-  readmeZhCN: path.join(ROOT_DIR, 'docs', 'readme', 'README.zh-CN.md'),
+  readmeZhHans: path.join(ROOT_DIR, 'docs', 'readme', 'README.zh-Hans.md'),
   readmeZhHant: path.join(ROOT_DIR, 'docs', 'readme', 'README.zh-Hant.md'),
   readmeJa: path.join(ROOT_DIR, 'docs', 'readme', 'README.ja.md'),
   readmeKo: path.join(ROOT_DIR, 'docs', 'readme', 'README.ko.md'),
@@ -153,7 +153,7 @@ Options:
   // Update README badges
   const readmeFiles = [
     { path: FILES.readme, name: 'README.md' },
-    { path: FILES.readmeZhCN, name: 'docs/readme/README.zh-CN.md' },
+    { path: FILES.readmeZhHans, name: 'docs/readme/README.zh-Hans.md' },
     { path: FILES.readmeZhHant, name: 'docs/readme/README.zh-Hant.md' },
     { path: FILES.readmeJa, name: 'docs/readme/README.ja.md' },
     { path: FILES.readmeKo, name: 'docs/readme/README.ko.md' },

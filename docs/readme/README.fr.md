@@ -19,13 +19,13 @@
 </p>
 
 <p align="center">
-  <a href="../../README.md">English</a> | <a href="README.zh-CN.md">简体中文</a> | <a href="README.zh-Hant.md">繁體中文</a> | <a href="README.ja.md">日本語</a> | <a href="README.ko.md">한국어</a> | <a href="README.fr.md">Français</a> | <a href="README.vi.md">Tiếng Việt</a>
+  <a href="../../README.md">English</a> | <a href="README.zh-Hans.md">简体中文</a> | <a href="README.zh-Hant.md">繁體中文</a> | <a href="README.ja.md">日本語</a> | <a href="README.ko.md">한국어</a> | <a href="README.fr.md">Français</a> | <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
 ---
 
 <p align="center">
-  <img src="../screenshots/overview.png" alt="Aperçu d'OxideTerm" width="800">
+  <img src="../screenshots/overview/fr.png" alt="Aperçu d'OxideTerm" width="800">
 </p>
 
 ## Qu'est-ce qu'OxideTerm ?
@@ -356,6 +356,33 @@ Recherche de contenu à l’échelle du projet avec cache intelligent :
 - **11 langues** : English, 简体中文, 繁體中文, 日本語, Français, Deutsch, Español, Italiano, 한국어, Português, Tiếng Việt.
 - **Chargement dynamique** : packs de langue à la demande via i18next.
 - **Type-safe** : définitions TypeScript pour toutes les clés de traduction.
+
+<details>
+<summary>📸 Les 11 langues en action</summary>
+<br>
+<table>
+  <tr>
+    <td align="center"><img src="../screenshots/overview/en.png" width="280"><br><b>English</b></td>
+    <td align="center"><img src="../screenshots/overview/zhHans.png" width="280"><br><b>简体中文</b></td>
+    <td align="center"><img src="../screenshots/overview/zhHant.png" width="280"><br><b>繁體中文</b></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="../screenshots/overview/ja.png" width="280"><br><b>日本語</b></td>
+    <td align="center"><img src="../screenshots/overview/ko.png" width="280"><br><b>한국어</b></td>
+    <td align="center"><img src="../screenshots/overview/fr.png" width="280"><br><b>Français</b></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="../screenshots/overview/de.png" width="280"><br><b>Deutsch</b></td>
+    <td align="center"><img src="../screenshots/overview/es.png" width="280"><br><b>Español</b></td>
+    <td align="center"><img src="../screenshots/overview/it.png" width="280"><br><b>Italiano</b></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="../screenshots/overview/pt-BR.png" width="280"><br><b>Português</b></td>
+    <td align="center"><img src="../screenshots/overview/vi.png" width="280"><br><b>Tiếng Việt</b></td>
+    <td></td>
+  </tr>
+</table>
+</details>
 
 ### 🌐 Optimisation réseau
 - **Architecture dual-plane** : plan de données (WebSocket direct) et plan de contrôle (Tauri IPC) séparés.
