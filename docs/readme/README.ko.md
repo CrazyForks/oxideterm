@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.19.1-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.19.2-blue" alt="Version">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platform">
   <img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blueviolet" alt="License">
   <img src="https://img.shields.io/badge/rust-1.75+-orange" alt="Rust">
@@ -25,13 +25,9 @@
 ---
 
 <p align="center">
-  <img src="../screenshots/overview/ko.png" alt="OxideTerm 개요" width="800">
+  <img src="../media/ai-terminal-demo.gif" alt="OxideTerm AI 데모">
 </p>
-
-<p align="center">
-  <img src="../media/ai-terminal-demo.gif" alt="AI 터미널 데모" width="800">
-</p>
-<p align="center"><em>🤖 AI 어시스턴트 — "로컬 터미널을 열고 pwd 실행"</em></p>
+<p align="center"><em>🤖 AI 어시스턴트 — "로컬 터미널을 열고 echo hello, world! 실행"</em></p>
 
 ## OxideTerm이란?
 

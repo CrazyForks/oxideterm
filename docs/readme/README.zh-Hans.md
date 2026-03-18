@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.19.1-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.19.2-blue" alt="Version">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platform">
   <img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blueviolet" alt="License">
   <img src="https://img.shields.io/badge/rust-1.75+-orange" alt="Rust">
@@ -25,13 +25,9 @@
 ---
 
 <p align="center">
-  <img src="../screenshots/overview/zhHans.png" alt="OxideTerm 概览" width="800">
+  <img src="../media/ai-terminal-demo.gif" alt="OxideTerm AI 演示">
 </p>
-
-<p align="center">
-  <img src="../media/ai-terminal-demo.gif" alt="AI 终端演示" width="800">
-</p>
-<p align="center"><em>🤖 AI 助手 —「打开一个本地终端并运行 pwd」</em></p>
+<p align="center"><em>🤖 AI 助手 —「打开一个本地终端并运行 echo hello, world!」</em></p>
 
 ## OxideTerm 是什么？
 
