@@ -1,10 +1,10 @@
 {
   "ai": {
     "chat": {
-      "title": "AI 聊天",
+      "title": "OxideSens",
       "header": "聊天",
-      "get_started": "开始使用 Copilot",
-      "disabled_message": "在设置中启用 AI 功能，开始与终端助手对话。",
+      "get_started": "开始使用 OxideSens",
+      "disabled_message": "在设置中启用 AI 功能，开始与 OxideSens 对话。",
       "open_settings": "打开设置",
       "new_chat": "新对话",
       "new_chat_tooltip": "新建对话",
@@ -48,7 +48,7 @@
       "send_btn": "发送",
       "send_key": "发送",
       "newline_key": "换行",
-      "thinking": "Copilot 思考中..."
+      "thinking": "OxideSens 正在思考..."
     },
     "message": {
       "you": "你",

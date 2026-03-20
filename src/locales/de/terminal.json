@@ -34,7 +34,7 @@
       "no_matches_in_history": "Keine Treffer im Sitzungsverlauf gefunden"
     },
     "ai": {
-      "title": "KI-Assistent",
+      "title": "OxideSens",
       "api_key_required": "API-Schlüssel erforderlich",
       "api_key_hint": "Konfigurieren Sie Ihren API-Schlüssel unter Einstellungen → KI, um diese Funktion zu nutzen.",
       "context": "Kontext:",

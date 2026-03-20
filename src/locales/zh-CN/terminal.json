@@ -34,7 +34,7 @@
       "no_matches_in_history": "会话历史中无匹配项"
     },
     "ai": {
-      "title": "AI 助手",
+      "title": "OxideSens",
       "api_key_required": "需要 API Key",
       "api_key_hint": "在 设置 → AI 中配置您的 API Key 以使用此功能。",
       "context": "上下文:",

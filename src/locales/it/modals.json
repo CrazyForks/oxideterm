@@ -342,7 +342,7 @@
         "appearance": "Aspetto",
         "connections": "Connessioni",
         "ssh": "Chiavi SSH",
-        "ai": "Assistente AI"
+        "ai": "OxideSens"
       },
       "terminal": {
         "title": "Impostazioni Terminale",
@@ -406,8 +406,8 @@
         "no_keys": "Nessuna chiave trovata nella posizione predefinita."
       },
       "ai": {
-        "title": "Assistente AI",
-        "description": "Configura chat AI inline con la tua API.",
+        "title": "OxideSens",
+        "description": "Configura OxideSens inline con la tua API.",
         "enable": {
           "title": "Abilita Funzionalità AI",
           "shortcut_windows": "Premi Ctrl+Shift+I nel terminale per aprire il pannello AI",

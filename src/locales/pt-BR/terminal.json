@@ -34,7 +34,7 @@
       "no_matches_in_history": "Nenhuma correspondência encontrada no histórico da sessão"
     },
     "ai": {
-      "title": "Assistente IA",
+      "title": "OxideSens",
       "api_key_required": "Chave de API necessária",
       "api_key_hint": "Configure sua chave de API em Configurações → IA para usar este recurso.",
       "context": "Contexto:",

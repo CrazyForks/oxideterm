@@ -34,7 +34,7 @@
       "no_matches_in_history": "Không tìm thấy kết quả trong lịch sử phiên"
     },
     "ai": {
-      "title": "Trợ lý AI",
+      "title": "OxideSens",
       "api_key_required": "Cần API Key",
       "api_key_hint": "Cấu hình API key của bạn trong Cài đặt → AI để sử dụng tính năng này.",
       "context": "Ngữ cảnh:",

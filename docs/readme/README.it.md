@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.19.2-blue" alt="Versione">
+  <img src="https://img.shields.io/badge/version-0.20.0-blue" alt="Versione">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Piattaforma">
   <img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blueviolet" alt="Licenza">
   <img src="https://img.shields.io/badge/rust-1.75+-orange" alt="Rust">
@@ -27,11 +27,11 @@
 <p align="center">
   <img src="../media/ai-terminal-demo.gif" alt="Demo IA di OxideTerm">
 </p>
-<p align="center"><em>🤖 Assistente IA — «Apri un terminale locale ed esegui echo hello, world!»</em></p>
+<p align="center"><em>🤖 OxideSens — «Apri un terminale locale ed esegui echo hello, world!»</em></p>
 
 ## Cos'è OxideTerm?
 
-OxideTerm è un'**applicazione terminale multipiattaforma** che unifica shell locali, sessioni SSH remote, gestione file, editing di codice e assistenza IA in un singolo binario nativo Rust. **Non** è un wrapper Electron — l'intero backend è scritto in Rust e viene distribuito come eseguibile nativo da 20-35 MB tramite Tauri 2.0.
+OxideTerm è un'**applicazione terminale multipiattaforma** che unifica shell locali, sessioni SSH remote, gestione file, editing di codice e OxideSens in un singolo binario nativo Rust. **Non** è un wrapper Electron — l'intero backend è scritto in Rust e viene distribuito come eseguibile nativo da 20-35 MB tramite Tauri 2.0.
 
 ### Perché un altro terminale?
 
@@ -156,7 +156,7 @@ Forwarding locale (-L), remoto (-R) e SOCKS5 dinamico (-D) completo:
 - **Auto-ripristino**: i forwarding `Suspended` riprendono alla riconnessione
 - **Timeout di inattività**: `FORWARD_IDLE_TIMEOUT` (300s) previene connessioni zombie
 
-### 🤖 Assistente Terminale IA
+### 🤖 OxideSens
 
 IA a doppia modalità con design orientato alla privacy:
 
@@ -285,7 +285,7 @@ Il frontend adotta un pattern **Multi-Store** (16 store) per gestire domini di s
 | **TransferStore** | Coda e avanzamento dei trasferimenti SFTP |
 | **PluginStore** | Stato runtime dei plugin e registro UI |
 | **ProfilerStore** | Metriche del profiler risorse |
-| **AiChatStore** | Stato della conversazione del chat IA |
+| **AiChatStore** | Stato della conversazione OxideSens |
 | **SettingsStore** | Impostazioni dell'applicazione |
 | **BroadcastStore** | Broadcast dell'input — replica i tasti premuti su più pannelli |
 | **CommandPaletteStore** | Stato di apertura/chiusura della palette comandi |

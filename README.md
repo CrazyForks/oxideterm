@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.19.2-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.20.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platform">
   <img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blueviolet" alt="License">
   <img src="https://img.shields.io/badge/rust-1.75+-orange" alt="Rust">
@@ -27,11 +27,11 @@
 <p align="center">
   <img src="docs/media/ai-terminal-demo.gif" alt="OxideTerm AI Demo">
 </p>
-<p align="center"><em>🤖 AI Assistant — "Open a local terminal and run echo hello, world!"</em></p>
+<p align="center"><em>🤖 OxideSens — "Open a local terminal and run echo hello, world!"</em></p>
 
 ## What Is OxideTerm?
 
-OxideTerm is a **cross-platform terminal application** that unifies local shells, remote SSH sessions, file management, code editing, and AI assistance into a single Rust-native binary. It is **not** an Electron wrapper — the entire backend is written in Rust, shipping as a 20-35 MB native executable via Tauri 2.0.
+OxideTerm is a **cross-platform terminal application** that unifies local shells, remote SSH sessions, file management, code editing, and OxideSens into a single Rust-native binary. It is **not** an Electron wrapper — the entire backend is written in Rust, shipping as a 20-35 MB native executable via Tauri 2.0.
 
 ### Why Another Terminal?
 
@@ -156,7 +156,7 @@ Full local (-L), remote (-R), and dynamic SOCKS5 (-D) forwarding:
 - **Auto-restore**: `Suspended` forwards resume on reconnect
 - **Idle timeout**: `FORWARD_IDLE_TIMEOUT` (300s) prevents zombie connections
 
-### 🤖 AI Terminal Assistant
+### 🤖 OxideSens
 
 Dual-mode AI with privacy-first design:
 
@@ -285,7 +285,7 @@ Frontend adopts a **Multi-Store** pattern (16 stores) to handle drastically diff
 | **TransferStore** | SFTP transfer queue and progress |
 | **PluginStore** | Plugin runtime state and UI registry |
 | **ProfilerStore** | Resource profiler metrics |
-| **AiChatStore** | AI chat conversation state |
+| **AiChatStore** | OxideSens conversation state |
 | **SettingsStore** | Application settings |
 | **BroadcastStore** | Broadcast input — replicate keystrokes to multiple panes |
 | **CommandPaletteStore** | Command palette open/close state |

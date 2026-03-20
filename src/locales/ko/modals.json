@@ -342,7 +342,7 @@
         "appearance": "외관",
         "connections": "연결",
         "ssh": "SSH 키",
-        "ai": "AI 어시스턴트"
+        "ai": "OxideSens"
       },
       "terminal": {
         "title": "터미널 설정",
@@ -406,8 +406,8 @@
         "no_keys": "기본 위치에서 키를 찾을 수 없습니다."
       },
       "ai": {
-        "title": "AI 어시스턴트",
-        "description": "자체 API로 인라인 AI 채팅을 구성합니다.",
+        "title": "OxideSens",
+        "description": "자체 API로 인라인 OxideSens를 구성합니다.",
         "enable": {
           "title": "AI 기능 활성화",
           "shortcut_windows": "터미널에서 Ctrl+Shift+I를 눌러 AI 패널 열기",

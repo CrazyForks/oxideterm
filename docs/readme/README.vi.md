@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.19.2-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.20.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platform">
   <img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blueviolet" alt="License">
   <img src="https://img.shields.io/badge/rust-1.75+-orange" alt="Rust">
@@ -27,11 +27,11 @@
 <p align="center">
   <img src="../media/ai-terminal-demo.gif" alt="Demo AI OxideTerm">
 </p>
-<p align="center"><em>🤖 Trợ lý AI — "Mở terminal cục bộ và chạy echo hello, world!"</em></p>
+<p align="center"><em>🤖 OxideSens — "Mở terminal cục bộ và chạy echo hello, world!"</em></p>
 
 ## OxideTerm là gì?
 
-OxideTerm là một **ứng dụng terminal đa nền tảng** kết hợp shell cục bộ, phiên SSH từ xa, quản lý tệp, chỉnh sửa mã nguồn và hỗ trợ AI vào một tệp nhị phân gốc duy nhất được viết bằng Rust. Đây **không** phải là một wrapper Electron — toàn bộ backend được viết bằng Rust, đóng gói thành tệp thực thi gốc chỉ 20-35 MB thông qua Tauri 2.0.
+OxideTerm là một **ứng dụng terminal đa nền tảng** kết hợp shell cục bộ, phiên SSH từ xa, quản lý tệp, chỉnh sửa mã nguồn và OxideSens vào một tệp nhị phân gốc duy nhất được viết bằng Rust. Đây **không** phải là một wrapper Electron — toàn bộ backend được viết bằng Rust, đóng gói thành tệp thực thi gốc chỉ 20-35 MB thông qua Tauri 2.0.
 
 ### Tại sao lại cần thêm một Terminal?
 
@@ -156,7 +156,7 @@ Chuyển tiếp cổng đầy đủ: local (-L), remote (-R), và dynamic SOCKS5
 - **Tự động khôi phục**: các chuyển tiếp `Suspended` được tiếp tục khi kết nối lại
 - **Thời gian chờ nhàn rỗi**: `FORWARD_IDLE_TIMEOUT` (300 giây) ngăn kết nối zombie
 
-### 🤖 Trợ lý AI cho Terminal
+### 🤖 OxideSens
 
 AI chế độ kép với thiết kế ưu tiên quyền riêng tư:
 
@@ -285,7 +285,7 @@ Frontend áp dụng mẫu **Multi-Store** (16 stores) để xử lý các miền
 | **TransferStore** | Hàng đợi truyền tải SFTP và tiến độ |
 | **PluginStore** | Trạng thái runtime plugin và registry UI |
 | **ProfilerStore** | Số liệu profiler tài nguyên |
-| **AiChatStore** | Trạng thái hội thoại AI chat |
+| **AiChatStore** | Trạng thái hội thoại OxideSens |
 | **SettingsStore** | Cài đặt ứng dụng |
 | **BroadcastStore** | Broadcast input — sao chép phím gõ đến nhiều panel |
 | **CommandPaletteStore** | Trạng thái mở/đóng command palette |

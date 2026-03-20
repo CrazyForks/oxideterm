@@ -218,7 +218,7 @@ export const ChatMessage = memo(function ChatMessage({
                     className="text-[11px] text-theme-text-muted/50 bg-theme-bg/30 rounded px-2 py-1"
                   >
                     <span className="font-semibold text-theme-text-muted/40 mr-1.5">
-                      {orig.role === 'user' ? t('ai.message.you') : 'AI'}:
+                      {orig.role === 'user' ? t('ai.message.you') : 'OxideSens'}:
                     </span>
                     <span className="whitespace-pre-wrap break-words">
                       {orig.content.length > 500 ? orig.content.slice(0, 500) + '…' : orig.content}
@@ -238,7 +238,7 @@ export const ChatMessage = memo(function ChatMessage({
       {/* Header — user on right, AI on left */}
       <div className={`flex items-center gap-1.5 mb-0.5 ${isUser ? 'flex-row-reverse' : ''}`}>
         <span className="text-[11px] font-semibold text-theme-text-muted/50">
-          {isUser ? t('ai.message.you') : 'Copilot'}
+          {isUser ? t('ai.message.you') : 'OxideSens'}
         </span>
         {message.context && !isUser && (
           <span className="text-[10px] text-theme-text-muted/40 font-medium">

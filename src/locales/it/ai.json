@@ -2,9 +2,9 @@
   "ai": {
     "chat": {
       "header": "Chat",
-      "get_started": "Inizia con Copilot",
-      "title": "Chat AI",
-      "disabled_message": "Abilita AI nelle Impostazioni per iniziare a chattare con l'assistente del terminale.",
+      "get_started": "Inizia con OxideSens",
+      "title": "OxideSens",
+      "disabled_message": "Abilita AI nelle Impostazioni per iniziare a chattare con OxideSens.",
       "open_settings": "Apri Impostazioni",
       "new_chat": "Nuova Chat",
       "new_chat_tooltip": "Nuova chat",
@@ -48,7 +48,7 @@
       "send_btn": "Invia",
       "send_key": "Invia",
       "newline_key": "Nuova riga",
-      "thinking": "Copilot sta pensando..."
+      "thinking": "OxideSens sta pensando..."
     },
     "message": {
       "you": "Tu",

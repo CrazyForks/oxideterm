@@ -185,8 +185,8 @@ export const ModelSelector = ({ onOpenSettings }: ModelSelectorProps) => {
 
   // Get compact display name
   const displayName = activeModel
-    ? `${activeProvider?.name || 'AI'}/${activeModel.split('/').pop()}`
-    : activeProvider?.name || 'AI';
+    ? `${activeProvider?.name || 'OxideSens'}/${activeModel.split('/').pop()}`
+    : activeProvider?.name || 'OxideSens';
 
   // Truncate for header space
   const truncatedName = displayName.length > 24 ? displayName.slice(0, 22) + '...' : displayName;
@@ -213,7 +213,7 @@ export const ModelSelector = ({ onOpenSettings }: ModelSelectorProps) => {
           "text-theme-text-muted hover:text-theme-text hover:bg-theme-accent/10",
           open && "bg-theme-accent/10 text-theme-text"
         )}
-        title={`${activeProvider?.name || 'AI'}: ${activeModel}`}
+        title={`${activeProvider?.name || 'OxideSens'}: ${activeModel}`}
       >
         <Circle className={cn(
           "w-1.5 h-1.5 fill-current shrink-0",

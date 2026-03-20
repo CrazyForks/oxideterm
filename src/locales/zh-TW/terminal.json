@@ -34,7 +34,7 @@
       "no_matches_in_history": "工作階段歷史中找不到符合項目"
     },
     "ai": {
-      "title": "AI 助手",
+      "title": "OxideSens",
       "api_key_required": "需要 API 金鑰",
       "api_key_hint": "請在設定 → AI 中設定您的 API 金鑰以使用此功能。",
       "context": "上下文：",

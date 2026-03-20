@@ -2,9 +2,9 @@
   "ai": {
     "chat": {
       "header": "Trò chuyện",
-      "get_started": "Bắt đầu với Copilot",
-      "title": "AI Chat",
-      "disabled_message": "Bật AI trong Cài đặt để bắt đầu trò chuyện với trợ lý terminal của bạn.",
+      "get_started": "Bắt đầu với OxideSens",
+      "title": "OxideSens",
+      "disabled_message": "Bật AI trong Cài đặt để bắt đầu trò chuyện với OxideSens.",
       "open_settings": "Mở cài đặt",
       "new_chat": "Cuộc trò chuyện mới",
       "new_chat_tooltip": "Cuộc trò chuyện mới",
@@ -48,7 +48,7 @@
       "send_btn": "Gửi",
       "send_key": "Gửi",
       "newline_key": "Dòng mới",
-      "thinking": "Copilot đang suy nghĩ..."
+      "thinking": "OxideSens đang suy nghĩ..."
     },
     "message": {
       "you": "Bạn",

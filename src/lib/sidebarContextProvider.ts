@@ -6,7 +6,7 @@
  * 2. Dynamic Buffer Sync - Last N lines from active terminal
  * 3. Selection Priority - Highlighted text as "focus area"
  * 
- * This enables GitHub Copilot-style deep context awareness.
+ * This enables deep context awareness for OxideSens.
  */
 
 import { platform } from './platform';

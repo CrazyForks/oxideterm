@@ -342,7 +342,7 @@
         "appearance": "Erscheinungsbild",
         "connections": "Verbindungen",
         "ssh": "SSH-Schlüssel",
-        "ai": "KI-Assistent"
+        "ai": "OxideSens"
       },
       "terminal": {
         "title": "Terminal-Einstellungen",
@@ -406,8 +406,8 @@
         "no_keys": "Keine Schlüssel am Standardort gefunden."
       },
       "ai": {
-        "title": "KI-Assistent",
-        "description": "Inline-KI-Chat mit Ihrer eigenen API konfigurieren.",
+        "title": "OxideSens",
+        "description": "Inline-OxideSens mit Ihrer eigenen API konfigurieren.",
         "enable": {
           "title": "KI-Funktionen aktivieren",
           "shortcut_windows": "Drücken Sie Strg+Umschalt+I im Terminal, um das KI-Panel zu öffnen",

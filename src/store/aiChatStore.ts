@@ -540,7 +540,7 @@ export const useAiChatStore = create<AiChatStore>()((set, get) => ({
     // Get AI settings
     const aiSettings = useSettingsStore.getState().settings.ai;
     if (!aiSettings.enabled) {
-      set({ error: 'AI is not enabled. Please enable it in Settings.' });
+      set({ error: 'OxideSens is not enabled. Please enable it in Settings.' });
       return;
     }
 

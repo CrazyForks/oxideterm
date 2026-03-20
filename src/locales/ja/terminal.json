@@ -34,7 +34,7 @@
       "no_matches_in_history": "セッション履歴に一致が見つかりません"
     },
     "ai": {
-      "title": "AIアシスタント",
+      "title": "OxideSens",
       "api_key_required": "APIキーが必要です",
       "api_key_hint": "この機能を使用するには、設定→AIでAPIキーを設定してください。",
       "context": "コンテキスト:",

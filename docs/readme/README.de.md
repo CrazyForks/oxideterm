@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.19.2-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.20.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Plattform">
   <img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blueviolet" alt="Lizenz">
   <img src="https://img.shields.io/badge/rust-1.75+-orange" alt="Rust">
@@ -27,11 +27,11 @@
 <p align="center">
   <img src="../media/ai-terminal-demo.gif" alt="OxideTerm KI-Demo">
 </p>
-<p align="center"><em>🤖 KI-Assistent — „Ein lokales Terminal öffnen und echo hello, world! ausführen"</em></p>
+<p align="center"><em>🤖 OxideSens — „Ein lokales Terminal öffnen und echo hello, world! ausführen“</em></p>
 
 ## Was ist OxideTerm?
 
-OxideTerm ist eine **plattformübergreifende Terminal-Anwendung**, die lokale Shells, entfernte SSH-Sitzungen, Dateiverwaltung, Code-Bearbeitung und KI-Unterstützung in einer einzigen nativen Rust-Binärdatei vereint. Es ist **kein** Electron-Wrapper — das gesamte Backend ist in Rust geschrieben und wird als 20–35 MB große native Programmdatei über Tauri 2.0 ausgeliefert.
+OxideTerm ist eine **plattformübergreifende Terminal-Anwendung**, die lokale Shells, entfernte SSH-Sitzungen, Dateiverwaltung, Code-Bearbeitung und OxideSens in einer einzigen nativen Rust-Binärdatei vereint. Es ist **kein** Electron-Wrapper — das gesamte Backend ist in Rust geschrieben und wird als 20–35 MB große native Programmdatei über Tauri 2.0 ausgeliefert.
 
 ### Warum noch ein Terminal?
 
@@ -156,7 +156,7 @@ Vollständige lokale (-L), entfernte (-R) und dynamische SOCKS5-Weiterleitung (-
 - **Auto-Wiederherstellung**: `Suspended`-Weiterleitungen werden nach Reconnect fortgesetzt
 - **Leerlauf-Timeout**: `FORWARD_IDLE_TIMEOUT` (300s) verhindert Zombie-Verbindungen
 
-### 🤖 KI-Terminal-Assistent
+### 🤖 OxideSens
 
 Dual-Mode-KI mit datenschutzorientiertem Design:
 
@@ -285,7 +285,7 @@ Das Frontend verwendet ein **Multi-Store**-Muster (16 Stores) für grundlegend v
 | **TransferStore** | SFTP-Transfer-Warteschlange und Fortschritt |
 | **PluginStore** | Plugin-Laufzeitzustand und UI-Registry |
 | **ProfilerStore** | Ressourcen-Profiler-Metriken |
-| **AiChatStore** | KI-Chat-Konversationszustand |
+| **AiChatStore** | OxideSens-Konversationszustand |
 | **SettingsStore** | Anwendungseinstellungen |
 | **BroadcastStore** | Broadcast-Eingabe — Tastatureingaben an mehrere Fenster replizieren |
 | **CommandPaletteStore** | Befehlspalette Öffnen/Schließen-Zustand |

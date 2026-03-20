@@ -138,7 +138,7 @@
     "cmd_settings": "設定を開く",
     "cmd_toggle_sidebar": "サイドバー切替",
     "cmd_toggle_panel": "パネルの切り替え",
-    "cmd_toggle_ai_sidebar": "AI サイドバーの切り替え",
+    "cmd_toggle_ai_sidebar": "OxideSens の切り替え",
     "cmd_zen_mode": "Zen モード切替",
     "cmd_close_tab": "現在のタブを閉じる",
     "cmd_split_horizontal": "水平に分割",

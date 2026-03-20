@@ -342,7 +342,7 @@
         "appearance": "外觀",
         "connections": "連線",
         "ssh": "SSH 金鑰",
-        "ai": "AI 助手"
+        "ai": "OxideSens"
       },
       "terminal": {
         "title": "終端機設定",
@@ -406,8 +406,8 @@
         "no_keys": "在預設位置找不到金鑰。"
       },
       "ai": {
-        "title": "AI 助手",
-        "description": "使用您自己的 API 設定內建 AI 聊天。",
+        "title": "OxideSens",
+        "description": "使用您自己的 API 設定內建 OxideSens。",
         "enable": {
           "title": "啟用 AI 功能",
           "shortcut_windows": "在終端機中按 Ctrl+Shift+I 開啟 AI 面板",

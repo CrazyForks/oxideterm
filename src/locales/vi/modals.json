@@ -342,7 +342,7 @@
         "appearance": "Giao diện",
         "connections": "Kết nối",
         "ssh": "SSH Keys",
-        "ai": "Trợ lý AI"
+        "ai": "OxideSens"
       },
       "terminal": {
         "title": "Cài đặt Terminal",
@@ -406,8 +406,8 @@
         "no_keys": "Không tìm thấy key ở vị trí mặc định."
       },
       "ai": {
-        "title": "Trợ lý AI",
-        "description": "Cấu hình chat AI inline với API của riêng bạn.",
+        "title": "OxideSens",
+        "description": "Cấu hình OxideSens inline với API của riêng bạn.",
         "enable": {
           "title": "Bật tính năng AI",
           "shortcut_windows": "Nhấn Ctrl+Shift+I trong terminal để mở panel AI",

@@ -34,7 +34,7 @@
       "no_matches_in_history": "Nessuna corrispondenza nella cronologia della sessione"
     },
     "ai": {
-      "title": "Assistente AI",
+      "title": "OxideSens",
       "api_key_required": "Chiave API Richiesta",
       "api_key_hint": "Configura la tua chiave API in Impostazioni → AI per usare questa funzione.",
       "context": "Contesto:",

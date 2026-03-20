@@ -2,9 +2,9 @@
   "ai": {
     "chat": {
       "header": "채팅",
-      "get_started": "Copilot 시작하기",
-      "title": "AI 채팅",
-      "disabled_message": "설정에서 AI를 활성화하여 터미널 어시스턴트와 대화를 시작하세요.",
+      "get_started": "OxideSens 시작하기",
+      "title": "OxideSens",
+      "disabled_message": "설정에서 AI를 활성화하여 OxideSens와 대화를 시작하세요.",
       "open_settings": "설정 열기",
       "new_chat": "새 채팅",
       "new_chat_tooltip": "새 채팅",
@@ -48,7 +48,7 @@
       "send_btn": "전송",
       "send_key": "전송",
       "newline_key": "줄바꿈",
-      "thinking": "Copilot 생각 중..."
+      "thinking": "OxideSens 생각 중..."
     },
     "message": {
       "you": "나",

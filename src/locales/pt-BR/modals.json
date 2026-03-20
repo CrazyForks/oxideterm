@@ -342,7 +342,7 @@
         "appearance": "Aparência",
         "connections": "Conexões",
         "ssh": "Chaves SSH",
-        "ai": "Assistente IA"
+        "ai": "OxideSens"
       },
       "terminal": {
         "title": "Configurações do terminal",
@@ -406,8 +406,8 @@
         "no_keys": "Nenhuma chave encontrada no local padrão."
       },
       "ai": {
-        "title": "Assistente IA",
-        "description": "Configure chat IA inline com sua própria API.",
+        "title": "OxideSens",
+        "description": "Configure OxideSens inline com sua própria API.",
         "enable": {
           "title": "Habilitar recursos de IA",
           "shortcut_windows": "Pressione Ctrl+Shift+I no terminal para abrir painel de IA",
