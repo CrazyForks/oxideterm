@@ -24,10 +24,13 @@
 
 ---
 
-<p align="center">
-  <video src="https://github.com/user-attachments/assets/4ba033aa-94b5-4ed4-980c-5c3f9f21db7e" controls width="100%"></video>
-</p>
-<p align="center"><em>🤖 OxideSens —「打开一个本地终端并运行 echo hello, world!」</em></p>
+<div align="center">
+
+https://github.com/user-attachments/assets/4ba033aa-94b5-4ed4-980c-5c3f9f21db7e
+
+*🤖 OxideSens —「打开一个本地终端并运行 echo hello, world!」*
+
+</div>
 
 ## OxideTerm 是什么？
 
