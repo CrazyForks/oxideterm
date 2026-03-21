@@ -107,7 +107,7 @@ export const anthropicProvider: AiStreamProvider = {
   async *streamCompletion(
     config: AiRequestConfig,
     messages: ChatMessage[],
-    _signal: AbortSignal
+    signal: AbortSignal
   ): AsyncGenerator<AiStreamEvent> {
     const cleanBaseUrl = config.baseUrl.replace(/\/+$/, '');
     const url = `${cleanBaseUrl}/v1/messages`;
@@ -138,6 +138,7 @@ export const anthropicProvider: AiStreamProvider = {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify(body),
+      signal,
     });
 
     const { ok, status } = await statusPromise;
@@ -177,6 +178,7 @@ export const anthropicProvider: AiStreamProvider = {
 
     try {
       while (true) {
+        if (signal.aborted) break;
         const { done, value } = await reader.read();
         if (done) break;
 

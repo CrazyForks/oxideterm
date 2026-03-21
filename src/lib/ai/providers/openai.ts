@@ -61,7 +61,7 @@ export const openaiProvider: AiStreamProvider = {
   async *streamCompletion(
     config: AiRequestConfig,
     messages: ChatMessage[],
-    _signal: AbortSignal
+    signal: AbortSignal
   ): AsyncGenerator<AiStreamEvent> {
     const cleanBaseUrl = config.baseUrl.replace(/\/+$/, '');
     const url = `${cleanBaseUrl}/chat/completions`;
@@ -88,6 +88,7 @@ export const openaiProvider: AiStreamProvider = {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
+      signal,
     });
 
     const { ok, status } = await statusPromise;
@@ -128,6 +129,7 @@ export const openaiProvider: AiStreamProvider = {
 
     try {
       while (true) {
+        if (signal.aborted) break;
         const { done, value } = await reader.read();
         if (done) break;
 

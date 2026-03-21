@@ -70,6 +70,7 @@ export function aiFetchStreaming(
     method: string;
     headers: Record<string, string>;
     body: string;
+    signal?: AbortSignal;
   }
 ): {
   /** Promise that resolves with { ok, status } once the HTTP status is known */
@@ -95,6 +96,20 @@ export function aiFetchStreaming(
       controller = c;
     },
   });
+
+  // When the abort signal fires, close the stream so the reader stops
+  // and the Rust backend detects the closed channel.
+  if (init.signal) {
+    const onAbort = () => {
+      try { controller.close(); } catch { /* already closed */ }
+    };
+    if (init.signal.aborted) {
+      // Already aborted before we started
+      onAbort();
+    } else {
+      init.signal.addEventListener('abort', onAbort, { once: true });
+    }
+  }
 
   const channel = new Channel<AiStreamChunk>();
   channel.onmessage = (msg) => {

@@ -68,7 +68,7 @@ export const ollamaProvider: AiStreamProvider = {
   async *streamCompletion(
     config: AiRequestConfig,
     messages: ChatMessage[],
-    _signal: AbortSignal
+    signal: AbortSignal
   ): AsyncGenerator<AiStreamEvent> {
     const cleanBaseUrl = config.baseUrl.replace(/\/+$/, '');
     // Use Ollama's OpenAI-compatible endpoint
@@ -97,6 +97,7 @@ export const ollamaProvider: AiStreamProvider = {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
+        signal,
       });
 
       const resp = await statusPromise;
@@ -142,6 +143,7 @@ export const ollamaProvider: AiStreamProvider = {
 
     try {
       while (true) {
+        if (signal.aborted) break;
         const { done, value } = await reader.read();
         if (done) break;
 

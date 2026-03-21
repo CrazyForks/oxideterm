@@ -82,7 +82,7 @@ export const geminiProvider: AiStreamProvider = {
   async *streamCompletion(
     config: AiRequestConfig,
     messages: ChatMessage[],
-    _signal: AbortSignal
+    signal: AbortSignal
   ): AsyncGenerator<AiStreamEvent> {
     const cleanBaseUrl = config.baseUrl.replace(/\/+$/, '');
     // Gemini uses API key as query param, not Bearer token
@@ -105,6 +105,7 @@ export const geminiProvider: AiStreamProvider = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal,
     });
 
     const { ok, status } = await statusPromise;
@@ -142,6 +143,7 @@ export const geminiProvider: AiStreamProvider = {
 
     try {
       while (true) {
+        if (signal.aborted) break;
         const { done, value } = await reader.read();
         if (done) break;
 

@@ -1116,6 +1116,9 @@ You have tools to interact with the user's terminal sessions and workspace. **Us
 
         if (completedToolCalls.length === 0) break;
 
+        // Check abort between tool rounds
+        if (abortController.signal.aborted) break;
+
         if (!toolContext) {
           // Tool use not enabled but model generated tool calls — append error and stop
           fullContent += '\n\n[Tool execution unavailable: tool use is not enabled]';
@@ -1267,6 +1270,14 @@ You have tools to interact with the user's terminal sessions and workspace. **Us
           tc.status = 'running';
           updateContent(accumulatedContent + fullContent, true, false, [...persistedToolCalls]);
 
+          // Check abort before each tool execution
+          if (abortController.signal.aborted) {
+            tc.status = 'rejected';
+            tc.result = { toolCallId: tc.id, toolName: tc.name, success: false, output: '', error: 'Generation was stopped.' };
+            toolResultMessages.push({ role: 'tool', content: JSON.stringify({ error: 'Generation was stopped.' }), tool_call_id: tc.id, tool_name: tc.name });
+            continue;
+          }
+
           let parsedArgs: Record<string, unknown> = {};
           const maybeParsedArgs = parseToolArguments(tc.arguments);
           if (!maybeParsedArgs) {
@@ -1406,7 +1417,9 @@ You have tools to interact with the user's terminal sessions and workspace. **Us
         console.warn('[AiChatStore] Failed to persist final message content:', e);
       }
     } catch (e) {
-      if (e instanceof Error && e.name === 'AbortError') {
+      // Treat any error during an active abort as an intentional stop, not a failure
+      const wasAborted = abortController.signal.aborted || (e instanceof Error && e.name === 'AbortError');
+      if (wasAborted) {
         const currentMsg = get().conversations
           .find((c) => c.id === convId)
           ?.messages.find((m) => m.id === assistantMessage.id);
