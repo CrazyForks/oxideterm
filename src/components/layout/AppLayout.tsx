@@ -231,7 +231,7 @@ export const AppLayout = () => {
       {!zenMode && <Sidebar />}
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0">
         {!zenMode && <TabBar />}
 
         <PanelGroup orientation="vertical" className="flex-1">
