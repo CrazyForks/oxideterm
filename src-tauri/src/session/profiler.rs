@@ -349,14 +349,15 @@ async fn sampling_loop(
             _ = interval.tick() => {
                 // Degraded mode: only emit RTT-only metrics
                 if consecutive_failures >= MAX_CONSECUTIVE_FAILURES {
-                    let current_state = *state.read().unwrap();
-                    if current_state != ProfilerState::Degraded {
-                        *state.write().unwrap() = ProfilerState::Degraded;
+                    let mut s = state.write().unwrap();
+                    if *s != ProfilerState::Degraded {
+                        *s = ProfilerState::Degraded;
                         warn!(
                             "Resource profiler degraded for {} after {} consecutive failures",
                             connection_id, consecutive_failures
                         );
                     }
+                    drop(s);
                     let metrics = make_empty_metrics(MetricsSource::RttOnly);
                     store_metrics(&latest, &history, &metrics);
                     emit_metrics(&app_handle, &connection_id, &metrics);

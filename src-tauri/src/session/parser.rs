@@ -148,10 +148,11 @@ impl BatchParser {
         let mut performer = self.performer.lock();
         let lines = performer.finish();
 
+        let now = chrono::Utc::now().timestamp_millis() as u64;
         lines
             .into_iter()
             .filter(|line| !line.is_empty())
-            .map(TerminalLine::new)
+            .map(|line| TerminalLine::with_timestamp(line, now))
             .collect()
     }
 }

@@ -54,7 +54,9 @@ async fn build_replay_frame(scroll_buffer: Arc<ScrollBuffer>) -> Result<Vec<u8>,
         return Ok(Vec::new());
     }
 
-    let mut text = String::new();
+    // Pre-allocate based on exact total of line lengths + CRLF separators
+    let estimated = lines.iter().map(|l| l.text.len() + 2).sum();
+    let mut text = String::with_capacity(estimated);
     for (idx, line) in lines.iter().enumerate() {
         if idx > 0 {
             text.push_str("\r\n");
@@ -607,25 +609,18 @@ impl WsBridge {
         let (mut ws_sender, mut ws_receiver) = ws_stream.split();
 
         // 发送 scroll_buffer 中最近的历史行给新连接的客户端
-        // 只发送最近 REPLAY_LINE_COUNT 行，避免克隆整个缓冲区浪费内存
-        let history_lines = scroll_buffer.tail_lines(REPLAY_LINE_COUNT).await;
-        if !history_lines.is_empty() {
-            debug!(
-                "Sending {} history lines to reconnected client for session {}",
-                history_lines.len(),
-                session_handle.id
-            );
-            // 将历史行重新组合为原始数据发送
-            let history_data: String = history_lines
-                .iter()
-                .map(|line| format!("{}\r\n", line.text))
-                .collect();
-            let frame = data_frame(Bytes::from(history_data));
-            if let Err(e) = ws_sender
-                .send(Message::Binary(frame.encode().to_vec()))
-                .await
-            {
-                warn!("Failed to send history data: {}", e);
+        if let Ok(replay_frame) = build_replay_frame(scroll_buffer.clone()).await {
+            if !replay_frame.is_empty() {
+                debug!(
+                    "Sending history replay to reconnected client for session {}",
+                    session_handle.id
+                );
+                if let Err(e) = ws_sender
+                    .send(Message::Binary(replay_frame))
+                    .await
+                {
+                    warn!("Failed to send history data: {}", e);
+                }
             }
         }
 
