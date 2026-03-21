@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StopCircle, Terminal, Layers, Sparkles, Code2, FolderOpen } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
@@ -141,7 +141,7 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, externalValue, 
   const showContextChips = hasActiveTerminal || hasSplitPanes || hasIdeContext || hasSftpContext;
 
   // Auto-resize textarea
-  useEffect(() => {
+  useLayoutEffect(() => {
     const textarea = textareaRef.current;
     if (textarea) {
       textarea.style.height = 'auto';

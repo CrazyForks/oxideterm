@@ -33,6 +33,17 @@ export default defineConfig(async () => {
           ],
           // React core
           'vendor': ['react', 'react-dom', 'zustand'],
+          // Code editor (loaded lazily via IDE mode)
+          'codemirror': [
+            '@codemirror/view',
+            '@codemirror/state',
+            '@codemirror/commands',
+            '@codemirror/language',
+            '@codemirror/search',
+            '@codemirror/autocomplete',
+            '@codemirror/theme-one-dark',
+            '@replit/codemirror-indentation-markers',
+          ],
           // UI components
           'radix-ui': [
             '@radix-ui/react-dialog',

@@ -58,6 +58,7 @@
     "@radix-ui/react-toast": "^1.2.15",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@replit/codemirror-indentation-markers": "^6.5.3",
+    "@tanstack/react-virtual": "^3.13.23",
     "@tauri-apps/api": "^2.10.0",
     "@tauri-apps/plugin-dialog": "^2.6.0",
     "@tauri-apps/plugin-fs": "^2.4.5",

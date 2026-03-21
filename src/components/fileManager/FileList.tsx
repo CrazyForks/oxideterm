@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { 
   Folder, 
   File, 
@@ -116,6 +117,73 @@ export interface FileListProps {
   t: (key: string, options?: Record<string, unknown>) => string;
 }
 
+const FILE_ROW_HEIGHT = 28; // py-1 + text-xs + border ≈ 28px
+
+type FileRowProps = {
+  file: FileInfo;
+  isSelected: boolean;
+  isRemote: boolean;
+  path: string;
+  selected: Set<string>;
+  onSelect: (name: string, multi: boolean, range: boolean) => void;
+  onNavigate: (path: string) => void;
+  onPreview?: (file: FileInfo) => void;
+  onContextMenu: (e: React.MouseEvent, file: FileInfo) => void;
+};
+
+const FileRow = React.memo<FileRowProps>(({
+  file, isSelected, isRemote, path, selected,
+  onSelect, onNavigate, onPreview, onContextMenu,
+}) => (
+  <div
+    draggable
+    onDragStart={(e) => {
+      e.dataTransfer.setData('application/json', JSON.stringify({
+        files: Array.from(selected.size > 0 ? selected : [file.name]),
+        source: isRemote ? 'remote' : 'local',
+        basePath: path
+      }));
+    }}
+    onClick={(e) => {
+      e.stopPropagation();
+      onSelect(file.name, e.metaKey || e.ctrlKey, e.shiftKey);
+    }}
+    onDoubleClick={(e) => {
+      e.stopPropagation();
+      if (file.file_type === 'Directory') {
+        const newPath = path === '/' ? `/${file.name}` : `${path}/${file.name}`;
+        onNavigate(newPath);
+      } else if (onPreview) {
+        onPreview(file);
+      }
+    }}
+    onContextMenu={(e) => onContextMenu(e, file)}
+    className={cn(
+      "flex items-center px-2 text-xs cursor-default select-none border-b border-transparent hover:bg-zinc-800",
+      isSelected && "bg-theme-accent/20 text-theme-accent"
+    )}
+    style={{ height: FILE_ROW_HEIGHT }}
+  >
+    <div className="flex-1 flex items-center gap-2 min-w-0">
+      {file.file_type === 'Directory'
+        ? <Folder className="h-3.5 w-3.5 flex-shrink-0 text-blue-400" />
+        : <File className="h-3.5 w-3.5 flex-shrink-0 text-zinc-400" />}
+      <span className="truncate">{file.name}</span>
+    </div>
+    <div className="w-20 text-right text-zinc-500">
+      {file.file_type === 'Directory' ? '-' : formatFileSize(file.size)}
+    </div>
+    <div className="w-24 text-right text-zinc-600">
+      {file.modified ? new Date(file.modified * 1000).toLocaleDateString() : '-'}
+    </div>
+  </div>
+), (prev, next) =>
+  prev.file === next.file &&
+  prev.isSelected === next.isSelected &&
+  prev.path === next.path
+);
+FileRow.displayName = 'FileRow';
+
 export const FileList: React.FC<FileListProps> = ({
   title,
   files,
@@ -169,6 +237,13 @@ export const FileList: React.FC<FileListProps> = ({
   const contextMenuRef = useRef<HTMLDivElement>(null);
   
   const isLocalPane = !isRemote;
+
+  const virtualizer = useVirtualizer({
+    count: files.length,
+    getScrollElement: () => listRef.current,
+    estimateSize: () => FILE_ROW_HEIGHT,
+    overscan: 15,
+  });
 
   // Handle selection
   const handleSelect = useCallback((name: string, multi: boolean, range: boolean) => {
@@ -432,60 +507,44 @@ export const FileList: React.FC<FileListProps> = ({
         onClick={onClearSelection}
         onKeyDown={handleKeyDown}
       >
-        {files.map((file) => {
-          const isSelected = selected.has(file.name);
-          return (
-            <div 
-              key={file.name}
-              draggable
-              onDragStart={(e) => {
-                e.dataTransfer.setData('application/json', JSON.stringify({
-                  files: Array.from(selected.size > 0 ? selected : [file.name]),
-                  source: isRemote ? 'remote' : 'local',
-                  basePath: path
-                }));
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleSelect(file.name, e.metaKey || e.ctrlKey, e.shiftKey);
-              }}
-              onDoubleClick={(e) => {
-                e.stopPropagation();
-                if (file.file_type === 'Directory') {
-                  const newPath = path === '/' ? `/${file.name}` : `${path}/${file.name}`;
-                  onNavigate(newPath);
-                } else if (onPreview) {
-                  onPreview(file);
-                }
-              }}
-              onContextMenu={(e) => handleContextMenu(e, file)}
-              className={cn(
-                "flex items-center px-2 py-1 text-xs cursor-default select-none border-b border-transparent hover:bg-zinc-800",
-                isSelected && "bg-theme-accent/20 text-theme-accent"
-              )}
-            >
-              <div className="flex-1 flex items-center gap-2 min-w-0">
-                {file.file_type === 'Directory' 
-                  ? <Folder className="h-3.5 w-3.5 flex-shrink-0 text-blue-400" /> 
-                  : <File className="h-3.5 w-3.5 flex-shrink-0 text-zinc-400" />}
-                <span className="truncate">{file.name}</span>
-              </div>
-              <div className="w-20 text-right text-zinc-500">
-                {file.file_type === 'Directory' ? '-' : formatFileSize(file.size)}
-              </div>
-              <div className="w-24 text-right text-zinc-600">
-                {file.modified ? new Date(file.modified * 1000).toLocaleDateString() : '-'}
-              </div>
-            </div>
-          );
-        })}
-        
-        {/* Empty state */}
-        {files.length === 0 && !loading && (
-          <div className="flex flex-col items-center justify-center h-32 text-theme-text-muted gap-2">
-            <FolderOpen className="h-8 w-8 opacity-30" />
-            <span className="text-sm">{t('fileManager.empty')}</span>
+        {files.length > 0 ? (
+          <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+            {virtualizer.getVirtualItems().map((virtualRow) => {
+              const file = files[virtualRow.index];
+              return (
+                <div
+                  key={file.name}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  <FileRow
+                    file={file}
+                    isSelected={selected.has(file.name)}
+                    isRemote={isRemote}
+                    path={path}
+                    selected={selected}
+                    onSelect={handleSelect}
+                    onNavigate={onNavigate}
+                    onPreview={onPreview}
+                    onContextMenu={handleContextMenu}
+                  />
+                </div>
+              );
+            })}
           </div>
+        ) : (
+          /* Empty state */
+          !loading && (
+            <div className="flex flex-col items-center justify-center h-32 text-theme-text-muted gap-2">
+              <FolderOpen className="h-8 w-8 opacity-30" />
+              <span className="text-sm">{t('fileManager.empty')}</span>
+            </div>
+          )
         )}
       </div>
 

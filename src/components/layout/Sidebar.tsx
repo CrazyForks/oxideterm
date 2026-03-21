@@ -169,18 +169,20 @@ export const Sidebar = () => {
     };
 
     if (isResizing) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      // Prevent text selection during resize
+      // Set body styles once on resize start, not per mousemove
       document.body.style.userSelect = 'none';
       document.body.style.cursor = 'col-resize';
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
     }
 
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.userSelect = '';
-      document.body.style.cursor = '';
+      if (isResizing) {
+        document.body.style.userSelect = '';
+        document.body.style.cursor = '';
+      }
     };
   }, [isResizing, setSidebarWidth]);
 

@@ -1036,6 +1036,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       theme: xtermTheme,
       scrollback: terminalSettings.scrollback || 5000,
       allowProposedApi: true,
+      fastScrollSensitivity: 5,
+      drawBoldTextInBrightColors: true,
       // Always enable transparency so we can toggle background images at
       // runtime without remounting (and destroying) the terminal instance.
       // The performance cost of allowTransparency is negligible on modern GPUs.
@@ -1565,7 +1567,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             // Send resize frame using Wire Protocol v1
             const frame = encodeResizeFrame(size.cols, size.rows);
             ws.send(frame);
-            api.resizeSession(sessionId, size.cols, size.rows);
         }
     });
 

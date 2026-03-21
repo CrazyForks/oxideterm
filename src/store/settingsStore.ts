@@ -801,9 +801,9 @@ export const useSettingsStore = create<SettingsStore>()(
         return { settings: newSettings };
       });
 
-      // Dynamically import i18n to avoid circular dependency
-      const { default: i18n } = await import('../i18n');
-      await i18n.changeLanguage(language);
+      // Dynamically import changeLanguage to avoid circular dependency
+      const { changeLanguage } = await import('../i18n');
+      await changeLanguage(language);
     },
 
     // ========== Terminal Settings ==========

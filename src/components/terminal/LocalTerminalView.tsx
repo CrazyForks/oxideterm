@@ -533,6 +533,8 @@ export const LocalTerminalView: React.FC<LocalTerminalViewProps> = ({
       theme: xtermTheme,
       scrollback: terminalSettings.scrollback || 5000,
       allowProposedApi: true,
+      fastScrollSensitivity: 5,
+      drawBoldTextInBrightColors: true,
       // Always enable so bg image can be toggled without remounting
       allowTransparency: true,
     });

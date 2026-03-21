@@ -1858,7 +1858,7 @@ export const SFTPView = ({ nodeId }: { nodeId: string }) => {
       )}
       <div className="flex-1 flex gap-2 min-h-0">
         {/* Local Pane */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0" style={{ contain: 'layout style' }}>
            <FileList 
              title={t('sftp.file_list.local')} 
              path={localPath} 
@@ -1895,7 +1895,7 @@ export const SFTPView = ({ nodeId }: { nodeId: string }) => {
         </div>
 
         {/* Remote Pane */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0" style={{ contain: 'layout style' }}>
            <FileList 
              title={t('sftp.file_list.remote', { host: session?.host })}
              path={remotePath}

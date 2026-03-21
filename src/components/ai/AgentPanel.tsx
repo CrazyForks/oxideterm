@@ -5,7 +5,7 @@
  * Uses agentStore for state, agentOrchestrator for execution.
  */
 
-import { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Bot,
@@ -296,7 +296,7 @@ const TaskInput = memo(({ onStart }: { onStart: (goal: string) => void }) => {
   );
 
   // Auto-resize textarea
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
