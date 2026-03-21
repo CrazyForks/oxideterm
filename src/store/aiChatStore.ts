@@ -149,17 +149,25 @@ function dtoToConversation(dto: FullConversationDto): AiConversation {
     createdAt: dto.createdAt,
     updatedAt: dto.updatedAt,
     messages: dto.messages.map((m) => {
-      // Re-parse thinking content from persisted full content
-      if (m.role === 'assistant' && m.content.includes('<thinking>')) {
-        const parsed = parseThinkingContent(m.content);
+      // Re-parse thinking + suggestions from persisted assistant content
+      if (m.role === 'assistant') {
+        let content = m.content;
+        let thinkingContent: string | undefined;
+        if (content.includes('<thinking>')) {
+          const parsed = parseThinkingContent(content);
+          content = parsed.content;
+          thinkingContent = parsed.thinkingContent;
+        }
+        const sugResult = parseSuggestions(content);
         return {
           id: m.id,
           role: m.role as 'assistant',
-          content: parsed.content,
-          thinkingContent: parsed.thinkingContent,
+          content: sugResult.cleanContent,
+          thinkingContent,
           toolCalls: m.toolCalls,
           timestamp: m.timestamp,
           context: m.context || undefined,
+          ...(sugResult.suggestions.length > 0 ? { suggestions: sugResult.suggestions } : {}),
         };
       }
       // Re-parse anchor metadata from persisted content
