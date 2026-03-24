@@ -121,6 +121,9 @@ rmp-serde = "1"
 # ANN vector search (HNSW index for RAG embeddings)
 instant-distance = { version = "0.6.1", features = ["with-serde"] }
 
+# Snowball stemming for BM25 search (deployments→deploy, running→run)
+rust-stemmers = "1"
+
 # Compression (for AI chat buffer snapshots)
 zstd = "0.13"
 

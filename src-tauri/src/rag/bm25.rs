@@ -2,6 +2,7 @@ use crate::rag::chunker::estimate_tokens;
 use crate::rag::error::RagError;
 use crate::rag::store::RagStore;
 use crate::rag::types::{is_cjk, Bm25Stats, PostingEntry};
+use rust_stemmers::{Algorithm, Stemmer};
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::LazyLock;
@@ -89,12 +90,17 @@ pub fn term_frequencies(tokens: &[String]) -> HashMap<String, f32> {
     freqs
 }
 
+/// Snowball English stemmer (thread-safe, zero-alloc internal state).
+static STEMMER: LazyLock<Stemmer> = LazyLock::new(|| Stemmer::create(Algorithm::English));
+
 fn flush_ascii(buf: &mut String, tokens: &mut Vec<String>) {
     if !buf.is_empty() {
         // Filter out English stop words; allow all other tokens (including single-char
         // technical terms like "c", "r", "w" that are common in terminal/ops context)
         if !ENGLISH_STOP_WORDS.contains(buf.as_str()) {
-            tokens.push(buf.clone());
+            // Apply Snowball stemming so "deployments" and "deploying" match "deploy"
+            let stemmed = STEMMER.stem(buf);
+            tokens.push(stemmed.into_owned());
         }
         buf.clear();
     }
@@ -314,13 +320,14 @@ mod tests {
     #[test]
     fn test_tokenize_english() {
         let tokens = tokenize("Hello world, this is a test!");
+        // Stemmed: "hello" → "hello", "world" → "world", "test" → "test"
         assert!(tokens.contains(&"hello".to_string()));
         assert!(tokens.contains(&"world".to_string()));
         assert!(tokens.contains(&"test".to_string()));
         // "this" and "is" are stop words — should be filtered
         assert!(!tokens.contains(&"this".to_string()));
         assert!(!tokens.contains(&"is".to_string()));
-        // Single chars like "a" should be filtered
+        // Single chars like "a" should be filtered (stop word)
         assert!(!tokens.contains(&"a".to_string()));
     }
 
@@ -330,13 +337,23 @@ mod tests {
         // Stop words filtered
         assert!(!tokens.contains(&"the".to_string()));
         assert!(!tokens.contains(&"over".to_string()));
-        // Content words preserved
+        // Content words preserved (stemmed forms)
         assert!(tokens.contains(&"quick".to_string()));
         assert!(tokens.contains(&"brown".to_string()));
         assert!(tokens.contains(&"fox".to_string()));
-        assert!(tokens.contains(&"jumps".to_string()));
-        assert!(tokens.contains(&"lazy".to_string()));
+        assert!(tokens.contains(&"jump".to_string()));  // "jumps" → "jump"
+        assert!(tokens.contains(&"lazi".to_string()));   // "lazy" → "lazi"
         assert!(tokens.contains(&"dog".to_string()));
+    }
+
+    #[test]
+    fn test_stemming() {
+        // Snowball English stemmer should normalize inflected forms
+        let tokens = tokenize("deployments deploying deployed containers running");
+        assert!(tokens.contains(&"deploy".to_string()));  // all three → "deploy"
+        assert_eq!(tokens.iter().filter(|t| *t == "deploy").count(), 3);
+        assert!(tokens.contains(&"contain".to_string())); // "containers" → "contain"
+        assert!(tokens.contains(&"run".to_string()));      // "running" → "run"
     }
 
     #[test]
@@ -355,8 +372,10 @@ mod tests {
         assert!(tokens.contains(&"部署".to_string()));
         assert!(tokens.contains(&"署指".to_string()));
         assert!(tokens.contains(&"指南".to_string()));
-        assert!(tokens.contains(&"version".to_string()));
-        // "2.0" → "2" (single char filtered) + "0" (filtered)
+        assert!(tokens.contains(&"version".to_string())); // "version" stem = "version"
+        // "2" and "0" are single-char non-stop tokens — kept
+        assert!(tokens.contains(&"2".to_string()));
+        assert!(tokens.contains(&"0".to_string()));
     }
 
     #[test]
