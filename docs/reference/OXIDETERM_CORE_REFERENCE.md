@@ -1,0 +1,2394 @@
+# OxideTerm 核心系统参考文档
+
+> **项目版本**: v0.20.1  
+> **文档状态**: 合并自 7 份独立参考文档  
+> **最后更新**: 2026-03-24
+
+---
+
+## 目录
+
+- [1. SSH 连接池与状态管理](#1-ssh-连接池与状态管理)
+- [2. 网络拓扑与 ProxyJump](#2-网络拓扑与-proxyjump)
+- [3. 重连编排器](#3-重连编排器)
+- [4. 端口转发](#4-端口转发)
+- [5. SFTP 文件管理](#5-sftp-文件管理)
+- [6. 远程代理（Remote Agent）](#6-远程代理remote-agent)
+- [7. SSH Agent 认证](#7-ssh-agent-认证)
+- [附录](#附录)
+
+---
+
+## 1. SSH 连接池与状态管理
+
+> 合并来源: `CONNECTION_POOL.md` (v1.4.0)  
+> 代码验证: 2026-03-24
+
+SSH 连接池不仅是后端的资源管理器，更是前端组件生命周期的**事实来源 (Source of Truth)**。整体采用 **Strong Consistency Sync**（强一致性同步）与 **Key-Driven Reset**（键驱动重置）模式，确保前端视图与后端连接池状态的绝对对齐。
+
+### 1.1 核心设计理念
+
+#### 1.1.1 强一致性同步 (Strong Consistency Sync)
+
+- **绝对单一来源**：前端不再维护连接状态的"副本"，而是通过 `AppStore` 实时映射后端 `Registry` 的快照。
+- **被动触发，主动拉取**：任何连接状态变更（如断开、重连）会触发 `refreshConnections()`，强制前端获取最新状态。
+
+#### 1.1.2 Key-Driven 自动重置
+
+- **物理级销毁**：React 组件（终端、SFTP）使用 `key={sessionId + connectionId}`。当连接发生物理重置（如重连生成新 ID）时，组件树会被强制销毁并重建。
+- **自动愈合**：通过此机制，消除了"旧组件持有死句柄"的一致性风险。
+
+#### 1.1.3 生命周期门禁 (State Gating)
+
+- **严格 IO 检查**：所有 IO 操作前必须经过 `connectionState === 'active'` 检查，否则直接拒绝，防止僵尸写入。
+
+### 1.2 架构拓扑：多 Store 联动
+
+OxideTerm 前端采用 18 个专用 Zustand Store 协同工作。连接池在 Store 架构中的位置如下：
+
+```mermaid
+flowchart TD
+    subgraph Frontend ["Frontend (Logic Layer)"]
+        Tree[SessionTreeStore] -- "1. Intent (User Action)" --> API
+        UI[React Components] -- "4. Render (Key=ID)" --> AppStore
+    end
+
+    subgraph Backend ["Backend (Registry)"]
+        Reg[SshConnectionRegistry]
+        Ref[RefCount System]
+        Pool[Connection Pool]
+    end
+
+    subgraph State ["Shared Fact"]
+        AppStore[AppStore (Fact)]
+    end
+
+    API[Tauri Command] -- "2. Execute" --> Reg
+    Reg -- "3. Events (link_down/up)" --> AppStore
+    AppStore -- "Sync" --> UI
+
+    Reg <--> Pool
+```
+
+18 个 Store 的功能分工：
+
+| Store | 职责 |
+|-------|------|
+| `sessionTreeStore` | 用户意图（会话树结构、连接流） |
+| `appStore` | 连接事实（`connections` Map，后端状态映射） |
+| `localTerminalStore` | 本地 PTY 生命周期 |
+| `ideStore` | IDE 模式状态 |
+| `reconnectOrchestratorStore` | 自动重连管道编排 |
+| `transferStore` | SFTP 传输队列 |
+| `pluginStore` | 插件运行时状态 |
+| `profilerStore` | 资源分析器 |
+| `aiChatStore` | OxideSens AI 聊天状态 |
+| `settingsStore` | 应用设置 |
+| `broadcastStore` | 广播输入到多个终端面板 |
+| `commandPaletteStore` | 命令面板状态 |
+| `eventLogStore` | 连接生命周期事件日志 |
+| `launcherStore` | 平台应用启动器 |
+| `recordingStore` | 会话录制与回放 |
+| `updateStore` | 自动更新生命周期 |
+| `agentStore` | 远程 Agent 管理 |
+| `ragStore` | RAG 知识检索状态 |
+
+### 1.3 引用计数与生命周期管理
+
+基于引用计数的资源管理确保连接在无消费者时自动回收。
+
+#### 引用计数规则
+
+| 消费者 (Consumer) | 行为模式 | Side Effect |
+|-------------------|----------|-------------|
+| **Terminal Tab** | `add_ref` / `release` | Tab 销毁时立即触发 `release`，并通过 Strong Sync 更新 UI 状态 |
+| **SFTP Panel** | `add_ref` / `release` | 依赖 `active` 状态门禁，连接断开时自动锁定界面 |
+| **Port Forward** | `add_ref` / `release` | 独立于 Tab 存在，只要规则活动，连接保持 `Active` |
+
+#### 状态转换图
+
+后端状态驱动前端行为的完整状态机：
+
+```mermaid
+stateDiagram-v2
+    [*] --> Connecting
+    
+    state "Connecting" as C {
+        [*] --> Handshake
+        Handshake --> Auth
+    }
+
+    C --> Active: Success (emit: refresh)
+    C --> Error: Failed (emit: error)
+
+    state "Active (Gated)" as A {
+        [*] --> Working
+        Working --> LinkDown: Heartbeat Fail
+        LinkDown --> Reconnecting: Auto-Retry
+        Reconnecting --> Working: Success (New ID)
+        Reconnecting --> Dead: Max Retries
+    }
+
+    Active --> Idle: RefCount = 0 (Start Timer)
+    Idle --> Active: RefCount > 0
+    Idle --> Disconnected: Timeout
+
+    Disconnected --> [*]
+```
+
+Rust 后端定义的 `ConnectionState` 枚举值：
+
+| 状态 | 含义 |
+|------|------|
+| `Connecting` | 连接中 |
+| `Active` | 已连接，有活跃使用者 |
+| `Idle` | 已连接，无使用者，等待超时 |
+| `LinkDown` | 链路断开（心跳失败），等待重连 |
+| `Reconnecting` | 正在重连 |
+| `Disconnecting` | 正在断开 |
+| `Disconnected` | 已断开 |
+
+### 1.4 核心机制详解
+
+#### 1.4.1 Strong Consistency Sync 流程
+
+当后端连接池发生状态变更时，必须严格遵循以下同步流程：
+
+```mermaid
+sequenceDiagram
+    participant Back as Backend (Registry)
+    participant Event as Runtime Event
+    participant Store as AppStore (Fact)
+    participant UI as React UI (Consumer)
+
+    Note over Back: 检测到心跳丢失 (LinkDown)
+    Back->>Back: Update State: LinkDown
+    Back->>Event: emit("connection_status_changed")
+    
+    Event->>Store: 触发 refreshConnections() [Strong Sync]
+    Store->>Back: ssh_list_connections()
+    Back-->>Store: 返回最新快照 (State: LinkDown)
+    
+    Store->>UI: Update Observables
+    Note over UI: UI 变灰，显示 Reconnecting 遮罩
+    Note over UI: 禁止所有 IO 操作 (State Gating)
+```
+
+#### 1.4.2 Key-Driven Resilience（键驱动自愈）
+
+##### 问题场景
+
+旧版本中，SSH 重连后生成了新的 `ConnectionID`，但前端终端组件仍持有旧的 `Handle`，导致输入无响应。
+
+##### 解决方案
+
+在 React 组件层：
+```tsx
+<TerminalView 
+  key={`${sessionId}-${connectionId}`}  // Key 包含连接 ID
+  sessionId={sessionId} 
+  connectionId={connectionId} 
+/>
+```
+
+**重连流程**：
+1. 后端重连成功，`ConnectionID` 变更（例如 `conn_A` → `conn_B`）。
+2. `AppStore` 同步获取新 ID。
+3. React 检测到 `key` 变化（`sess_1-conn_A` → `sess_1-conn_B`）。
+4. **旧组件销毁**：清理旧句柄、取消订阅。
+5. **新组件挂载**：获取新句柄，恢复 Shell 界面。
+
+### 1.5 错误处理与门禁系统
+
+所有可能产生 IO 的操作（写入、resize、SFTP 操作）都必须经过状态门禁。
+
+#### 后端门禁逻辑
+
+```rust
+macro_rules! check_gate {
+    ($connection) => {
+        if $connection.state != ConnectionState::Active {
+            return Err(Error::GateClosed("Connection not active"));
+        }
+    }
+}
+```
+
+#### 前端防御示意
+
+```mermaid
+graph TD
+    UserInput[用户输入/SFTP操作] --> Check{AppStore.state == Active?}
+    
+    Check -- Yes --> API[调用后端 API]
+    Check -- No --> Block[拦截操作]
+    
+    Block --> Toast[显示: 连接不稳定]
+    
+    API --> Result{后端结果}
+    Result -- Success --> Done
+    Result -- BrokenPipe --> TriggerSync[触发 Strong Sync]
+```
+
+### 1.6 连接池配置规范
+
+TypeScript 类型（`src/types/index.ts`）：
+
+```typescript
+export interface ConnectionPoolConfig {
+  idleTimeoutSecs: number;
+  maxConnections: number;
+  protectOnExit: boolean;
+}
+```
+
+Rust 结构体（`src-tauri/src/ssh/connection_registry.rs`）：
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectionPoolConfig {
+    /// 空闲超时时间（秒）
+    #[serde(default = "default_idle_timeout_secs")]
+    pub idle_timeout_secs: u64,
+
+    /// 最大连接数（0 = 无限制）
+    #[serde(default)]
+    pub max_connections: usize,
+
+    /// 是否在应用退出时保护连接（graceful shutdown）
+    #[serde(default = "default_true")]
+    pub protect_on_exit: bool,
+}
+```
+
+默认值：
+
+| 字段 | 默认值 | 说明 |
+|------|--------|------|
+| `idleTimeoutSecs` | 1800 | 30 分钟空闲超时 |
+| `maxConnections` | 0 | 无限制 |
+| `protectOnExit` | true | 退出时优雅关闭 |
+
+### 1.7 历史债务清理
+
+| 项目 | 状态 | 说明 |
+|------|------|------|
+| `ActiveConnectionCache` | ✅ 已移除 | 前端缓存，现直接依赖 `AppStore` |
+| `reconnect_handle` 手动管理 | ✅ 已移除 | 重连由前端 `reconnectOrchestratorStore` 编排（v1.6.2+），后端 auto-reconnect 已标记为 NEUTRALIZED STUB |
+| 前端侧 `ping` 逻辑 | ✅ 已移除 / ⚠️ 部分回归 | 原始前端 ping 逻辑已移除，完全依赖后端事件驱动。但 v1.11.1 新增了 `probeConnections` / `probeSingleConnection` IPC 命令，用于 Grace Period 阶段的连接存活探测（非常规心跳，仅在重连管道中使用） |
+
+---
+
+## 2. 网络拓扑与 ProxyJump
+
+> 合并来源: `NETWORK_TOPOLOGY.md` (v1.4.0)  
+> 代码验证: 2026-03-24
+
+OxideTerm 通过拓扑图自动计算最优路径，支持无限级跳板机级联、动态节点钻入，以及级联故障自愈。
+
+### 2.1 核心概念
+
+OxideTerm 提供两种方式管理多跳 SSH 连接：
+
+1. **ProxyJump (`proxy_chain`)**：配置时静态指定跳板机链路
+2. **Network Topology**：自动构建拓扑图，动态计算最优路径
+
+在 Strong Consistency Sync 架构下，网络拓扑模块遵循以下准则：
+
+| 准则 | 实现 |
+|------|------|
+| **级联状态传播** | 当链路中任一跳板机断开，所有下游节点的连接状态同步标记为 `link_down` |
+| **Key-Driven 销毁** | 前端组件使用 `key={sessionId-connectionId}`，链路断开时物理级销毁整棵组件树 |
+| **路径记忆** | 重连后自动恢复之前的工作目录（SFTP）和端口转发规则 |
+
+#### 什么是 ProxyJump？
+
+ProxyJump 是 OpenSSH 的标准功能，允许通过一个或多个跳板机（jump host / bastion）连接到目标服务器。
+
+```bash
+# 单跳
+ssh -J jumphost target
+
+# 多跳
+ssh -J jump1,jump2,jump3 target
+
+# 完整格式
+ssh -J admin@jump.example.com:2222 user@target.internal
+```
+
+OxideTerm 将 ProxyJump 链路配置化，存储在 `proxy_chain` 字段中，支持无限级级联。
+
+### 2.2 架构概览
+
+```
+┌────────────────────────────────────────────────────────────┐
+│  Local Machine                                             │
+│  ├── NetworkTopology                                       │
+│  │   ├── nodes: 所有已保存的连接节点                      │
+│  │   └── edges: 节点间的可达性关系                        │
+│  │                                                         │
+│  ├── Dijkstra 算法                                         │
+│  │   └── 计算最短路径：local → jump1 → jump2 → target     │
+│  │                                                         │
+│  └── SshConnectionRegistry                                 │
+│      └── establish_tunneled_connection()                   │
+│          └── 通过父连接的 direct-tcpip 建立隧道           │
+└────────────────────────────────────────────────────────────┘
+```
+
+#### 状态同步流程 (Strong Consistency Sync)
+
+```mermaid
+sequenceDiagram
+    participant Jump as 跳板机 (Jump Host)
+    participant Reg as SshConnectionRegistry
+    participant App as AppStore (Fact)
+    participant UI as React UI (Key-Driven)
+
+    Note over Jump: 心跳失败 (LinkDown)
+    Jump->>Reg: 标记 state = link_down
+    Reg->>Reg: 遍历 parent_connection_id 链
+    Reg->>Reg: 级联标记所有下游节点为 link_down
+    Reg->>App: emit("connection:update")
+    App->>App: refreshConnections() [Strong Sync]
+    App->>UI: 更新 Observables
+    Note over UI: key 变化 → 组件树销毁重建
+```
+
+### 2.3 proxy_chain 配置格式
+
+#### 数据结构
+
+```rust
+pub struct SavedConnection {
+    pub id: String,
+    pub name: String,
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub auth: SavedAuth,
+    
+    // ProxyJump 跳板机链路
+    pub proxy_chain: Vec<ProxyHopConfig>,
+}
+
+pub struct ProxyHopConfig {
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub auth: SavedAuth,
+}
+```
+
+#### 示例 1：单跳配置（Bastion → 数据库）
+
+```json
+{
+  "id": "prod-db",
+  "name": "Production Database",
+  "host": "db.internal",
+  "port": 22,
+  "username": "dba",
+  "auth": { "type": "key", "key_path": "~/.ssh/id_prod" },
+  
+  "proxy_chain": [
+    {
+      "host": "bastion.example.com",
+      "port": 22,
+      "username": "admin",
+      "auth": { "type": "agent" }
+    }
+  ]
+}
+```
+
+等价的 SSH 命令：
+```bash
+ssh -J admin@bastion.example.com dba@db.internal
+```
+
+#### 示例 2：多跳配置（HPC 环境）
+
+```json
+{
+  "id": "hpc-compute",
+  "name": "Supercomputer Node",
+  "host": "node123.cluster",
+  "port": 22,
+  "username": "researcher",
+  "auth": { "type": "key", "key_path": "~/.ssh/id_hpc" },
+  
+  "proxy_chain": [
+    {
+      "host": "login.university.edu",
+      "port": 22,
+      "username": "student",
+      "auth": { "type": "password", "keychain_id": "oxideterm-xxx" }
+    },
+    {
+      "host": "gateway.cluster",
+      "port": 22,
+      "username": "admin",
+      "auth": { "type": "agent" }
+    }
+  ]
+}
+```
+
+等价的 SSH 命令：
+```bash
+ssh -J student@login.university.edu,admin@gateway.cluster researcher@node123.cluster
+```
+
+连接流程：
+```
+本地 → login.university.edu → gateway.cluster → node123.cluster
+       (跳板机 1)              (跳板机 2)          (目标服务器)
+```
+
+#### 示例 3：复杂认证链路（4 跳不同认证方式）
+
+```json
+{
+  "id": "nested-service",
+  "name": "Deep Internal Service",
+  "host": "10.0.3.50",
+  "port": 22,
+  "username": "service",
+  "auth": { "type": "password", "keychain_id": "oxideterm-yyy" },
+  
+  "proxy_chain": [
+    {
+      "host": "public.gateway.com",
+      "port": 2222,
+      "username": "vpn_user",
+      "auth": { "type": "key", "key_path": "~/.ssh/id_vpn", "has_passphrase": true }
+    },
+    {
+      "host": "internal.gateway",
+      "port": 22,
+      "username": "admin",
+      "auth": { "type": "certificate", "key_path": "~/.ssh/id_cert", "cert_path": "~/.ssh/id_cert-cert.pub" }
+    },
+    {
+      "host": "10.0.2.10",
+      "port": 22,
+      "username": "operator",
+      "auth": { "type": "agent" }
+    }
+  ]
+}
+```
+
+特点：
+- 跳板机 1：非标准端口 (2222) + 带密码的私钥
+- 跳板机 2：SSH 证书认证
+- 跳板机 3：SSH Agent
+- 目标服务器：密码认证
+
+### 2.4 Network Topology 自动构建
+
+#### 构建规则
+
+1. **节点 (Nodes)**：每个保存的连接 = 一个节点
+2. **边 (Edges)**：从 `proxy_chain` 推断可达性
+   - 无 `proxy_chain` → `local → 目标`
+   - 有 `proxy_chain` → `local → hop1 → hop2 → ... → 目标`
+
+#### 示例
+
+**保存的连接**：
+
+```json
+[
+  {
+    "id": "bastion",
+    "name": "Jump Host",
+    "host": "bastion.example.com",
+    "port": 22,
+    "username": "admin",
+    "auth": { "type": "agent" },
+    "proxy_chain": []
+  },
+  {
+    "id": "db-server",
+    "name": "Database Server",
+    "host": "db.internal",
+    "port": 22,
+    "username": "dba",
+    "auth": { "type": "key", "key_path": "~/.ssh/id_db" },
+    "proxy_chain": [
+      {
+        "host": "bastion.example.com",
+        "port": 22,
+        "username": "admin",
+        "auth": { "type": "agent" }
+      }
+    ]
+  }
+]
+```
+
+**生成的拓扑图**：
+
+```
+Nodes:
+  - bastion (bastion.example.com:22)
+  - db-server (db.internal:22)
+
+Edges:
+  - local → bastion (cost: 1)
+  - bastion → db-server (cost: 1)
+```
+
+**可视化**：
+
+```
+┌───────┐      ┌─────────┐      ┌───────────┐
+│ local │ ───► │ bastion │ ───► │ db-server │
+└───────┘      └─────────┘      └───────────┘
+```
+
+#### API 调用
+
+```rust
+let connections = config.get_all_connections();
+let topology = NetworkTopology::build_from_connections(&connections);
+```
+
+### 2.5 Dijkstra 路径计算
+
+OxideTerm 使用 **Dijkstra 算法**计算从 `local` 到目标节点的最短路径。
+
+#### 算法特点
+
+- **Cost**：每条边的代价（默认为 1，可自定义）
+- **最短路径**：总 cost 最小的路径
+- **自动规避**：如果某条路径不可用，自动选择替代路径
+
+#### 示例：复杂拓扑
+
+```
+┌───────┐
+│ local │
+└───┬───┘
+    │
+    ├────────────────┬─────────────────┐
+    │                │                 │
+    ▼                ▼                 ▼
+┌─────────┐      ┌──────┐        ┌─────────┐
+│ bastion │      │ vpn  │        │ direct  │
+└────┬────┘      └───┬──┘        └────┬────┘
+     │               │                 │
+     ├───────────────┤                 │
+     │               │                 │
+     ▼               ▼                 ▼
+┌─────────┐      ┌──────┐        ┌─────────┐
+│   hpc   │      │  db  │        │  web    │
+└─────────┘      └──────┘        └─────────┘
+```
+
+**路径计算结果**：
+
+| 目标 | 最短路径 | 总 Cost |
+|------|---------|---------|
+| `hpc` | local → bastion → hpc | 2 |
+| `db` | local → vpn → db | 2 |
+| `web` | local → direct → web | 2 |
+
+当 bastion 不可用时，目标 `hpc` 的路径自动切换为 `local → vpn → hpc`（假设存在该边）。
+
+### 2.6 自定义边覆盖
+
+用户可以通过配置文件添加或排除边。
+
+#### 配置文件位置
+
+| 平台 | 路径 |
+|------|------|
+| macOS | `~/Library/Application Support/oxideterm/topology_edges.json` |
+| Linux | `~/.config/oxideterm/topology_edges.json` |
+| Windows | `%APPDATA%\OxideTerm\topology_edges.json` |
+
+#### 配置格式
+
+```json
+{
+  "custom_edges": [
+    {
+      "from": "bastion",
+      "to": "web",
+      "cost": 1
+    }
+  ],
+  "excluded_edges": [
+    {
+      "from": "local",
+      "to": "direct",
+      "cost": 1
+    }
+  ]
+}
+```
+
+- `custom_edges`：添加新的可达性关系（即使配置中不存在的边）
+- `excluded_edges`：移除自动生成的边（例如禁止直连某些服务器）
+
+Cost 自定义示例：
+
+```json
+{
+  "custom_edges": [
+    { "from": "local", "to": "slow-vpn", "cost": 10 },
+    { "from": "local", "to": "fast-fiber", "cost": 1 }
+  ]
+}
+```
+
+路径计算会优先选择 `fast-fiber`，即使 `slow-vpn` 路径更短（跳数少）。
+
+### 2.7 动态钻入（Tunneled Connection）
+
+在已连接的跳板机上**动态建立**到另一台服务器的新连接，无需预先配置。
+
+#### 工作原理
+
+```
+本地 ──SSH──► 跳板机
+              ↓
+              SSH (通过 direct-tcpip)
+              ↓
+            目标服务器
+```
+
+关键技术：
+- 使用父连接的 `direct-tcpip` channel
+- 在 channel 上建立新的 SSH 连接
+- 父连接标记为 `parent_connection_id`
+
+#### API 调用
+
+```rust
+let new_connection_id = registry.establish_tunneled_connection(
+    parent_connection_id,  // 已连接的跳板机 ID
+    target_config,         // 目标服务器配置
+).await?;
+```
+
+#### 使用场景
+
+1. **探索未知网络**：先连到跳板机，再逐步探索内网服务器
+2. **临时连接**：不想保存到配置的一次性连接
+3. **调试路由**：测试某个跳板机是否能到达目标
+
+### 2.8 级联故障处理
+
+当多跳链路中的某个节点断开时，架构确保整条链路的状态一致性和前端组件的自动自愈。
+
+#### 问题场景
+
+```
+local → bastion → gateway → target
+              ↑
+         心跳失败！
+```
+
+当 `bastion` 断开时，`gateway` 和 `target` 的连接也会失效（因为它们依赖 `bastion` 的 `direct-tcpip` 隧道）。
+
+#### 解决方案：级联状态传播
+
+```mermaid
+flowchart TD
+    subgraph Backend
+        B1[bastion: link_down] --> B2[遍历 parent_connection_id]
+        B2 --> B3[gateway: link_down]
+        B2 --> B4[target: link_down]
+    end
+
+    subgraph Frontend
+        F1[AppStore.refreshConnections] --> F2{检查 state}
+        F2 -- "link_down" --> F3[UI 组件 key 变化]
+        F3 --> F4[物理销毁旧组件]
+        F4 --> F5[显示重连遮罩]
+    end
+
+    B3 --> F1
+    B4 --> F1
+```
+
+#### 实现细节
+
+**1. 后端级联标记**：
+
+```rust
+fn propagate_link_down(&self, connection_id: &str) {
+    // 找到所有以此连接为 parent 的下游连接
+    let children = self.find_children(connection_id);
+    for child_id in children {
+        self.set_state(&child_id, ConnectionState::LinkDown);
+        self.propagate_link_down(&child_id); // 递归
+    }
+}
+```
+
+**2. 前端 Key-Driven 销毁**：
+
+```tsx
+<TerminalView
+  key={`${sessionId}-${connectionId}`}
+  sessionId={sessionId}
+/>
+```
+
+**3. 路径记忆与恢复**：
+- SFTP 当前路径存入 `PathMemoryMap[sessionId]`
+- 重连成功后，新组件挂载时自动恢复路径
+
+**4. 状态门禁**：
+
+在级联故障期间，所有 IO 操作被 State Gating 拦截：
+
+```typescript
+if (appStore.getConnectionState(sessionId) !== 'active') {
+  // 拒绝操作，显示 "连接不稳定" 提示
+  return;
+}
+```
+
+### 2.9 拓扑可视化
+
+#### 类型定义
+
+**节点信息**：
+
+```typescript
+interface TopologyNodeInfo {
+  id: string;
+  host: string;
+  port: number;
+  username: string;
+  displayName?: string;
+  authType: string;
+  isLocal: boolean;
+  neighbors: string[];         // 可直接到达的节点列表
+  tags: string[];
+  savedConnectionId?: string;  // 关联的保存连接 ID
+}
+```
+
+**边信息**：
+
+```typescript
+interface TopologyEdge {
+  from: string;   // 源节点 ID ("local" 表示本地)
+  to: string;     // 目标节点 ID
+  cost: number;   // 边的代价
+}
+```
+
+**路由结果**：
+
+```typescript
+interface RouteResult {
+  path: string[];      // 中间节点（不包括 local 和 target）
+  totalCost: number;   // 总代价
+}
+```
+
+**示例**：
+
+```typescript
+const route = await invoke('expand_auto_route', { targetId: 'prod-db' });
+// 返回: { path: ["bastion", "gateway"], totalCost: 3 }
+// 解释: local → bastion → gateway → prod-db
+```
+
+### 2.10 使用场景
+
+#### 场景 1：企业 VPN 网络
+
+```
+本地 → 公网 VPN → 内网网关 → 各个服务器
+```
+
+- 保存一个 VPN 连接（无 `proxy_chain`）
+- 其他服务器的 `proxy_chain` 指向 VPN
+- 拓扑自动推断所有内网服务器都需要通过 VPN
+
+#### 场景 2：HPC 集群
+
+```
+本地 → 大学登录节点 → 集群网关 → 计算节点
+```
+
+- 登录节点：无 `proxy_chain`
+- 集群网关：`proxy_chain = [登录节点]`
+- 计算节点：`proxy_chain = [登录节点, 集群网关]`
+- 拓扑图自动显示层级结构和依赖关系
+
+#### 场景 3：多云环境
+
+```
+本地 
+  ├─► AWS 跳板机 → AWS 服务器
+  ├─► Azure 跳板机 → Azure 服务器
+  └─► GCP 跳板机 → GCP 服务器
+```
+
+- 每个云的跳板机：无 `proxy_chain`（直连）
+- 云内服务器：`proxy_chain` 指向对应跳板机
+- 拓扑图清晰展示多云结构，路径计算自动选择正确的跳板机
+
+### 2.11 高级功能
+
+#### 2.11.1 节点复用
+
+如果 `proxy_chain` 中的跳板机已保存为连接，拓扑图会**复用**该节点（通过 `saved_connection_id` 关联），避免重复。
+
+匹配条件：跳板机的 `host:port:username` 与已保存连接完全一致。
+
+```json
+// 保存的连接: bastion
+{ "id": "bastion", "host": "bastion.example.com", "port": 22, "username": "admin" }
+
+// 另一个连接的 proxy_chain 引用了相同的 host:port:username
+"proxy_chain": [
+  { "host": "bastion.example.com", "port": 22, "username": "admin", "auth": { "type": "agent" } }
+]
+// → 拓扑图复用 "bastion" 节点，而非生成重复节点
+```
+
+#### 2.11.2 临时节点自动生成
+
+如果 `proxy_chain` 中的跳板机**未保存**为连接，拓扑图会自动生成临时节点：
+
+```
+temp@temp-jump.example.com:22
+  ├── id: "temp:temp-jump.example.com:22"
+  ├── tags: ["auto-generated"]
+  └── saved_connection_id: null
+```
+
+无需为每个跳板机创建保存连接，拓扑图仍然完整。
+
+---
+
+## 3. 重连编排器
+
+> 合并来源: `RECONNECT_ORCHESTRATOR_PLAN.md`  
+> 实现版本: v1.6.2，v1.11.1 新增 Grace Period  
+> 代码验证: 2026-03-24（基于 `src/store/reconnectOrchestratorStore.ts` 实际代码）
+
+### 3.1 设计背景与目标
+
+#### 设计原因
+
+1. **后端 auto-reconnect 已移除**（标记为 `NEUTRALIZED STUB`）。前端必须编排重连。
+2. `useConnectionEvents` 此前仅有防抖 + `reconnectCascade` 调用，缺少重连后的服务恢复（端口转发、SFTP、IDE）。
+3. 每次重连创建**新的 `connectionId`**（UUID），旧连接被放弃。
+4. `resetNodeState` 是焦土模式重置：关闭终端（销毁 forwarding manager 和持久化规则）、清除所有 session ID、重置节点状态为 `pending`。
+5. 终端恢复由 Key-Driven Reset（`key={sessionId-connectionId}`）自动处理，编排器不管终端生命周期。
+6. 端口转发和 SFTP 传输需要在重连成功后显式恢复。
+
+#### 设计目标
+
+1. **单一重连大脑**：队列管理、节流、重试、可观测性集中在一个 Store 中。
+2. **幂等可取消**：每个节点只有一个活跃 job，无重复工作。
+3. **确定性恢复序列**：Snapshot → Grace Period → SSH → Forwards → SFTP → IDE。
+4. **保留用户意图**：不恢复用户手动停止的转发；不恢复未保存的文件内容。
+
+#### 非目标
+
+1. ~~无后端改动~~ **（v1.11.1 更新）**：新增 `probe_connections` / `probe_single_connection` IPC 命令用于 Grace Period 支持。
+2. 不自动恢复 `disconnected`（硬断开）事件——仅处理 `link_down`。
+3. 不做内容级 IDE 恢复（只重新打开文件标签页）。
+4. 不管理终端会话（由 Key-Driven Reset 处理）。
+
+### 3.2 架构
+
+#### 核心类型
+
+**`ReconnectPhase` — 管道阶段枚举**：
+
+```typescript
+type ReconnectPhase =
+  | 'queued'            // 已入队，等待执行
+  | 'snapshot'          // 捕获重置前数据
+  | 'grace-period'      // (v1.11.1) 尝试恢复现有连接
+  | 'ssh-connect'       // 执行 reconnectCascade
+  | 'await-terminal'    // 等待 Key-Driven Reset 重建终端
+  | 'restore-forwards'  // 恢复端口转发规则
+  | 'resume-transfers'  // 恢复 SFTP 传输
+  | 'restore-ide'       // 恢复 IDE 文件标签页
+  | 'verify'            // 验证恢复结果
+  | 'done'              // 完成
+  | 'failed'            // 失败
+  | 'cancelled';        // 已取消
+```
+
+**`ReconnectJob` — 重连任务**：
+
+```typescript
+type ReconnectJob = {
+  nodeId: string;
+  nodeName: string;           // 用于 toast 消息
+  status: ReconnectPhase;
+  attempt: number;
+  maxAttempts: number;        // 默认 5，可通过 settingsStore 配置
+  startedAt: number;
+  endedAt?: number;
+  error?: string;
+  snapshot: ReconnectSnapshot;
+  abortController: AbortController;
+  restoredCount: number;      // 已恢复的服务数量（用于 toast）
+  phaseHistory: PhaseEvent[]; // 仅追加的阶段事件日志，用于调试
+};
+```
+
+**`ReconnectSnapshot` — 重连快照**：
+
+```typescript
+type ReconnectSnapshot = {
+  nodeId: string;
+  snapshotAt: number;    // 快照时间戳，用于检测用户后续操作
+  
+  // 端口转发规则，在 resetNodeState 销毁前捕获
+  forwardRules: Array<{
+    nodeId: string;
+    rules: ForwardRule[];   // 仅 active/suspended 规则，不含 stopped
+  }>;
+  
+  // 旧终端 session ID（用于查询未完成的 SFTP 传输）
+  oldTerminalSessionIds: string[];
+  
+  // 按 nodeId 分组的旧终端 session ID 映射
+  perNodeOldSessionIds: Map<string, string[]>;
+  
+  // 未完成的 SFTP 传输，在 resetNodeState 销毁旧 session 前捕获
+  incompleteTransfers: Array<{
+    oldSessionId: string;
+    transfers: IncompleteTransferInfo[];
+  }>;
+  
+  // 按节点的旧 SSH connectionId 映射，用于 Grace Period 探测
+  oldConnectionIds: Map<string, string>;
+  
+  // IDE 状态（如果 IDE 标签页为此节点打开）
+  ideSnapshot?: {
+    projectPath: string;
+    tabPaths: string[];
+    connectionId: string;      // 用于拓扑解析
+    dirtyContents: Record<string, string>;  // 快照时的脏文件内容
+  };
+};
+```
+
+**`OrchestratorState` — Store 状态**：
+
+```typescript
+interface OrchestratorState {
+  jobs: Map<string, ReconnectJob>;
+  /** 可序列化视图，供 React 订阅 */
+  jobEntries: Array<[string, ReconnectJob]>;
+}
+
+interface OrchestratorActions {
+  scheduleReconnect: (nodeId: string) => void;
+  cancel: (nodeId: string) => void;
+  cancelAll: () => void;
+  clearCompleted: () => void;
+  getJob: (nodeId: string) => ReconnectJob | undefined;
+}
+```
+
+> **注意**：实际代码中 State 不包含 `isRunning` 字段。并发控制通过 `jobs` Map 的幂等特性和内部锁机制实现。
+
+### 3.3 队列策略
+
+| 策略 | 细节 |
+|------|------|
+| **防抖** | 500ms 窗口收集多个 `link_down` 节点，选择最浅根节点 |
+| **幂等** | 如果 `jobs.has(nodeId)` 且状态非终态（`done`/`failed`/`cancelled`），跳过 |
+| **并发** | 1（复用已有的 `chainLock` 机制） |
+| **重试** | 指数退避 + ±20% 随机抖动 |
+
+退避算法：
+```
+delay = min(baseDelayMs × BACKOFF_MULTIPLIER^(attempt-1), maxDelayMs) × (0.8 ~ 1.2)
+```
+
+重连配置可通过 `settingsStore` 覆盖默认值（`enabled`、`maxAttempts`、`baseDelayMs`、`maxDelayMs`）。
+
+### 3.4 Pipeline 详情
+
+#### Phase 0: `snapshot`（关键前置步骤）
+
+**必须在 `reconnectCascade` 之前执行**，因为 `resetNodeState` 会销毁 forward 规则和旧 session。
+
+1. 收集 `oldTerminalSessionIds`：从 `nodeTerminalMap.get(nodeId)` 及其后代节点获取。
+2. 构建 `perNodeOldSessionIds` 映射（nodeId → 旧 session ID 列表）。
+3. 对每个旧 session ID：
+   - 调用 `api.listPortForwards(sessionId)` 快照转发规则。
+   - 过滤：仅保留 `status !== 'stopped'` 的规则（尊重用户意图）。
+4. 快照未完成的 SFTP 传输（`nodeSftpListIncompleteTransfers`）。
+5. 收集 `oldConnectionIds`（每个受影响节点的旧 `connectionId`）。
+6. 检查 `ideStore`：如果当前项目的 nodeId 匹配，保存 `{ projectPath, tabPaths, connectionId, dirtyContents }`。
+7. 以 `snapshotAt` 时间戳存储快照（用于后续的用户意图检测）。
+
+#### Phase 0.5: `grace-period`（v1.11.1 新增）
+
+**在执行破坏性重连之前，尝试恢复现有连接。**
+
+此阶段解决"焦土模式"问题：立即重连会杀死 TUI 应用（yazi、vim、htop），因为旧 SSH session 被销毁。
+
+逻辑：
+1. 从快照中获取 `oldConnectionIds`。
+2. 每 `GRACE_PROBE_INTERVAL_MS`（3 秒）循环探测，最长持续 `GRACE_PERIOD_MS`（30 秒）：
+   - 调用 `api.probeSingleConnection(oldConnectionId)` — 发送 SSH keepalive ping。
+   - 如果结果为 `"alive"`：
+     - 清除每个受影响节点的 `link_down` 状态。
+     - 恢复子节点状态。
+     - 显示"连接已恢复 — 会话保留"toast。
+     - 返回 `true` → **跳过所有后续阶段**（无需破坏性重连）。
+   - 如果结果为 `"dead"` 或 API 错误：继续探测直到超时。
+3. 30 秒超时后：返回 `false` → 进入 `ssh-connect`（破坏性重连）。
+
+**适用场景**：如果网络中断时间 < 30 秒（常见于 Wi-Fi 切换、睡眠/唤醒、短暂断线），SSH TCP 连接在服务端可能仍然存活。探测可以无损恢复，保留运行中的程序。
+
+#### Phase 1: `ssh-connect`
+
+1. 调用 `reconnectCascade(rootNodeId)`，内部执行：
+   - `resetNodeState()` 逐节点执行（销毁终端、转发、session）
+   - `connectNodeInternal()` 逐节点执行（创建新 SSH 连接，分配新 UUID）
+   - 递归重连后代节点
+   - `fetchTree()` 更新会话树
+2. 成功：新 `connectionId` 设置到各节点的 `rawNodes` 中。
+3. 失败：标记 job 为 `failed`，显示错误 toast。
+
+#### Phase 2: `await-terminal`
+
+React Key-Driven Reset 自动处理终端创建：
+- `AppLayout` 渲染 `TerminalView` 时使用 `key={sessionId-connectionId}`。
+- `connectionId` 变化 → 旧组件卸载 → 新组件挂载 → 调用 `createTerminalForNode`。
+
+编排器等待新的 `terminalSessionId` 出现：
+1. 确定哪些节点**需要**终端 session（快照中有转发或未完成传输的节点）。
+2. 每 500ms 轮询 `rawNodes[nodeId].terminalSessionId`，超时 10 秒。
+3. 对需要 session 但无终端标签页的节点，显式调用 `createTerminalForNode()` 确保存在有效 session。
+4. 构建 `oldSessionId → newSessionId` 映射（基于 `perNodeOldSessionIds` + 当前状态，确定性映射）。
+
+#### Phase 3: `restore-forwards`
+
+1. 收集当前存活的转发规则，避免重复或恢复用户手动停止的规则。
+2. 对快照中的每个 `forwardRules` 条目：
+   - 查找 old → new session ID 映射。
+   - 如果该节点无新 session，跳过。
+   - 对每条规则（排除 `stopped`）：
+     - 如果已存在相同 `type:bind_address:bind_port` 的转发，跳过。
+     - 调用 `api.createPortForward({ sessionId: newSessionId, ...rule })`。
+     - 失败：记录警告，继续。
+     - 成功：递增 `restoredCount`。
+3. 每条规则之间检查 `abortController.signal`。
+
+#### Phase 4: `resume-transfers`
+
+1. 使用 Phase 0 中预捕获的未完成传输数据（`snapshot.incompleteTransfers`）。
+2. 确保所有受影响节点的 SFTP 会话已初始化（必要时调用 `openSftpForNode`）。
+3. 对每个未完成传输条目：
+   - 调用 `nodeSftpResumeTransfer(nodeId, transferId)`。
+   - 失败：记录警告，继续。
+   - 成功：更新 `transferStore`，递增 `restoredCount`。
+4. 每个传输之间检查 `abortController.signal`。
+
+#### Phase 5: `restore-ide`
+
+1. 如果 `snapshot.ideSnapshot` 存在：
+   - 通过 `topologyResolver.getNodeId(ideSnapshot.connectionId)` 查找目标节点。
+   - 从当前节点状态获取新 `connectionId`。
+   - **用户意图检测**：以下情况跳过恢复：
+     - `ideStore.project` 存在且 `rootPath` 不同（用户已切换项目）。
+     - `ideStore.project` 存在且 `rootPath` 相同（已在打开状态）。
+     - `ideStore.lastClosedAt > snapshot.snapshotAt`（用户主动关闭了 IDE）。
+   - 调用 `ideStore.openProject(nodeId, projectPath)`。
+   - 对每个缓存的标签路径：调用 `ideStore.openFile(path)`。
+   - **不恢复** `content`/`originalContent`（文件将从远程重新获取）。
+
+### 3.5 集成点
+
+| 集成位置 | 变更 |
+|----------|------|
+| **`useConnectionEvents`** | 简化：移除 `pendingReconnectNodes`、`reconnectDebounceTimer`、`isReconnecting`、`reconnectRetryCount`。`link_down` 处理器委托给 `orchestrator.scheduleReconnect(nodeId)` |
+| **`TabBar`** | 使用 `orchestratorStore.jobs.get(nodeId)?.status` 替代 `session?.state === 'reconnecting'`。手动重连按钮调用 `orchestrator.scheduleReconnect(nodeId)`，取消按钮调用 `orchestrator.cancel(nodeId)` |
+| **`sessionTreeStore`** | `cancelPendingReconnect(nodeId)` 调用点替换为 `orchestrator.cancel(nodeId)`。`reconnectCascade` 本身不变（编排器调用它） |
+| **`appStore`** | 移除死代码 `cancelReconnect()`（后端 auto-reconnect 已禁用） |
+| **`ideStore`** | `partialize` 中增加 `cachedProjectPath`、`cachedTabPaths`、`cachedNodeId` |
+
+### 3.6 可观测性
+
+Toast 通知（通过 `useToastStore`），所有消息使用 i18n key（`connections` 命名空间，11 种语言）：
+
+| 事件 | 级别 | i18n Key |
+|------|------|----------|
+| 任务开始 | `info` | `connections.reconnect.starting` — "{nodeName} 正在恢复连接..." |
+| SSH 成功 | `info` | `connections.reconnect.ssh_restored` — "SSH 连接已恢复" |
+| 全部完成 | `success` | `connections.reconnect.completed` — "连接已恢复，{count} 个服务已重建" |
+| 失败 | `error` | `connections.reconnect.failed` — "连接恢复失败: {error}"（附重试按钮） |
+| 已取消 | `info` | `connections.reconnect.cancelled` — "已取消重连" |
+
+阶段事件日志（`phaseHistory`）：仅追加模式，每个 job 最多保留 `MAX_PHASE_HISTORY`（64）条记录，支持时间旅行调试。
+
+### 3.7 实现常量
+
+> 以下值来自 `src/store/reconnectOrchestratorStore.ts` 实际代码。带 `DEFAULT_` 前缀的常量可通过 `settingsStore` 覆盖。
+
+| 常量 | 值 | 说明 |
+|------|-----|------|
+| `DEBOUNCE_MS` | 500 | 防抖窗口 |
+| `DEFAULT_MAX_ATTEMPTS` | 5 | 最大重试次数，可通过 settingsStore 配置 |
+| `DEFAULT_BASE_RETRY_DELAY_MS` | 1,000 | 基础重试延迟 |
+| `DEFAULT_MAX_RETRY_DELAY_MS` | 15,000 | 最大重试延迟上限 |
+| `BACKOFF_MULTIPLIER` | 1.5 | 指数退避乘数 |
+| `MAX_RETAINED_JOBS` | 200 | 终态 job 最大保留数量（LRU 淘汰） |
+| `AUTO_CLEANUP_DELAY_MS` | 30,000 | 终态 job 自动清理延迟 |
+| `MAX_PHASE_HISTORY` | 64 | 每个 job 的阶段历史上限 |
+| `GRACE_PERIOD_MS` | 30,000 | Grace Period 最大等待时间（v1.11.1） |
+| `GRACE_PROBE_INTERVAL_MS` | 3,000 | Grace Period 探测间隔（v1.11.1） |
+
+### 3.8 关键约束
+
+1. **快照时序**：`resetNodeState` 关闭终端时会触发 `forwarding_registry.remove()`，**永久销毁**转发规则和持久化数据。快照**必须**在 `reconnectCascade` 调用之前完成。
+2. **Session 映射**：由于重连总是创建新的 `connectionId`，旧 session 成为孤儿。新 session 必须从头创建。
+3. **SFTP 传输存续**：`node_sftp_list_incomplete_transfers` 按 `nodeId` 查询。进度数据与 `close_terminal` 独立存储，重连后可在同一节点恢复。
+4. **转发 API 限制**：后端 `pause_forwards`/`restore_forwards` 存在但未暴露给前端 API 层。使用 `listPortForwards` + `createPortForward` 替代。
+5. **`connectNodeWithAncestors` 内部调用**：该函数内部调用 `resetNodeState`，两者之间无钩子。快照必须在进入 `reconnectCascade` **之前**完成。
+
+### 3.9 验证清单
+
+- [x] Link down → job 入队并携带快照 → SSH 重连 → 服务恢复 → toast 通知
+- [x] 运行中取消 → job cancelled，后续阶段跳过，toast 通知
+- [x] 500ms 内多次 link_down 事件 → 防抖合并到最浅根节点
+- [x] 幂等：相同 nodeId 重复入队 → 第二次跳过
+- [x] Suspended 转发规则在新 session 上恢复；用户手动停止的转发**不**恢复
+- [x] SFTP 未完成传输在新 session 上恢复（使用旧 session 查询）
+- [x] IDE 项目与文件标签页重新打开（内容从远程重新获取，非缓存）
+- [x] 终端通过 Key-Driven Reset 自动恢复（编排器不参与）
+- [x] `pnpm i18n:check` 通过（所有新增 key 覆盖 11 种语言）
+- [x] Grace Period 内 SSH keepalive 成功 → 直接恢复，不销毁 TUI 应用
+
+---
+
+## 4. 端口转发
+
+> 合并来源: `PORT_FORWARDING.md` (v1.4.0)
+
+### 4.1 概述
+
+OxideTerm 端口转发系统支持三种 SSH 隧道模式——本地转发、远程转发和动态转发（SOCKS5），并在连接断开重连后自动恢复所有转发规则。所有转发操作通过 `nodeId` 路由，遵循节点主权架构。
+
+#### 核心特性
+
+| 特性 | 版本 | 说明 |
+|------|------|------|
+| Link Resilience | v1.4.0 | SSH 连接断开重连后，自动恢复所有转发规则 |
+| 强一致性同步 | v1.4.0 | 规则变更强制触发 AppStore 刷新 |
+| 实时流量监控 | v1.4.0 | 基于 Tauri Event 的实时流量统计（Bytes In/Out） |
+| 状态门禁 | v1.4.0 | UI 操作严格受连接状态（Active）保护 |
+| 死亡报告 | v1.4.1 | 转发任务异常退出时主动上报 |
+| SSH 断连广播 | v1.4.1 | HandleController 提供 `subscribe_disconnect()` |
+| Suspended 状态 | v1.4.1 | `ForwardStatus::Suspended` |
+| 无锁 Channel I/O | v1.4.2 | 消息传递模式消除锁竞争 |
+| 子任务信号传播 | v1.4.2 | shutdown 广播信号 |
+| 全链路超时保护 | v1.4.2 | `FORWARD_IDLE_TIMEOUT`（300s） |
+
+### 4.2 架构与数据流
+
+```mermaid
+graph TD
+    subgraph UI ["Frontend (ForwardsView)"]
+        View["Forwards List<br/>key={nodeId}"]
+        Action["Add Rule Action"]
+    end
+    subgraph Logic ["Logic Layer"]
+        TreeStore["sessionTreeStore"]
+        AppStore["appStore (Fact)"]
+    end
+    subgraph Backend ["Rust Backend"]
+        Registry["Connection Registry"]
+        ForwardMgr["Forwarding Manager"]
+    end
+    View -->|1. Request Start| Action
+    Action -->|2. Check State| AppStore
+    AppStore -.->|Active| Action
+    AppStore -.->|Down| View
+    Action -->|3. IPC: node_create_forward| Backend
+    Backend -->|4. Start Listener| ForwardMgr
+    Backend -->|5. Success| Action
+    Action -->|6. Force Refresh| AppStore
+    AppStore -->|7. Update RefCount| TreeStore
+    Registry -->|Auto Reconnect| ForwardMgr
+    ForwardMgr -->|Restore Rules| ForwardMgr
+```
+
+**数据流说明：**
+
+1. 用户在 `ForwardsView` 发起添加转发请求
+2. 前端检查 `appStore` 中连接状态是否为 `Active`
+3. 状态门禁通过后，通过 IPC 调用 `node_create_forward`
+4. 后端 `ForwardingManager` 创建监听器
+5. 成功后返回前端
+6. 前端强制刷新 AppStore 以同步规则列表
+7. 更新 `sessionTreeStore` 中的引用计数
+8. 断线重连时，`Registry` 通知 `ForwardingManager` 自动恢复规则
+
+### 4.3 Key-Driven 重置机制
+
+转发组件遵循项目级的 Key-Driven Reset 不变量（参见第 1 章系统不变量）。当连接重建时，`nodeId` 对应的状态变更驱动组件重渲染，触发规则刷新：
+
+```tsx
+const nodeState = useNodeState(nodeId);
+
+useEffect(() => {
+  if (nodeId && nodeState.readiness === 'ready') {
+    refreshRules();
+  }
+}, [nodeId, nodeState.readiness]);
+```
+
+当 SSH 连接断开并重连后：
+- 后端生成新的 `connectionId`
+- 前端组件通过 `useNodeState` 感知状态变化
+- 自动调用 `refreshRules()` 拉取最新规则列表
+- 所有之前 `Suspended` 状态的规则恢复为 `Active`
+
+### 4.4 转发类型
+
+#### 4.4.1 本地转发（Local Forward）
+
+将本地端口映射到远程服务，最常见的使用场景。
+
+**典型场景：** 本机 `localhost:8080` → 远程 MySQL 服务 `3306`
+
+```mermaid
+sequenceDiagram
+    participant PC as 本地应用
+    participant OT as OxideTerm<br/>(bind 127.0.0.1:8080)
+    participant SSH as SSH 隧道
+    participant SVC as 远程服务<br/>(MySQL:3306)
+
+    PC->>OT: TCP 连接 :8080
+    OT->>SSH: 转发数据
+    SSH->>SVC: 投递到 :3306
+    SVC-->>SSH: 响应
+    SSH-->>OT: 返回数据
+    OT-->>PC: TCP 响应
+```
+
+#### 4.4.2 远程转发（Remote Forward）
+
+将远程端口映射回本地服务，适用于需要从远程访问本地开发服务器的场景。
+
+**典型场景：** 远程 `0.0.0.0:8080` → 本地开发服务器 `localhost:3000`
+
+```mermaid
+sequenceDiagram
+    participant User as 远程用户
+    participant Server as 远程服务器<br/>(bind 0.0.0.0:8080)
+    participant SSH as SSH 隧道
+    participant Local as 本地开发服务器<br/>(localhost:3000)
+
+    User->>Server: TCP 连接 :8080
+    Server->>SSH: 转发数据
+    SSH->>Local: 投递到 :3000
+    Local-->>SSH: 响应
+    SSH-->>Server: 返回数据
+    Server-->>User: TCP 响应
+```
+
+#### 4.4.3 动态转发（Dynamic Forward / SOCKS5）
+
+在本地创建 SOCKS5 代理，所有通过该代理的流量经由 SSH 隧道传输。
+
+**典型场景：** `localhost:1080` 作为 SOCKS5 代理
+
+```
+浏览器/应用 → SOCKS5 代理 (localhost:1080) → SSH 隧道 → 远程网络
+```
+
+动态转发不需要指定 `target_host` 和 `target_port`，目标地址由 SOCKS5 协议动态解析。
+
+### 4.5 界面交互
+
+#### 4.5.1 转发列表
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Port Forwarding                              [+ Add]   │
+├─────────────────────────────────────────────────────────┤
+│  🟢 Local  127.0.0.1:8080 → mysql.internal:3306        │
+│     ↑ 1.2 MB  ↓ 3.4 MB            [Stop] [Delete]     │
+│                                                         │
+│  🟢 Remote 0.0.0.0:8080 → localhost:3000               │
+│     ↑ 0.5 MB  ↓ 0.8 MB            [Stop] [Delete]     │
+│                                                         │
+│  🔴 Local  127.0.0.1:5432 → db.internal:5432           │
+│     Error: EADDRINUSE              [Restart] [Delete]   │
+│                                                         │
+│  🟡 Dynamic localhost:1080 (SOCKS5)                     │
+│     Suspended (reconnecting...)                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+#### 4.5.2 流量监控与状态同步
+
+- 流量统计每 **2 秒** 聚合一次，通过 Tauri Event 推送至前端
+- 每条规则显示 Bytes In / Bytes Out 实时数据
+- 状态变更（`starting` → `active` → `stopped` / `error` / `suspended`）实时反映在 UI
+
+### 4.6 API 参考
+
+> **注意：** 所有端口转发 API 已迁移至 `nodeId` 路由体系。后端命令采用 `node_` 前缀。
+
+#### 4.6.1 创建转发
+
+```typescript
+import { api } from '@/lib/api';
+
+// 创建本地转发
+const response = await api.nodeCreateForward({
+  node_id: nodeId,
+  forward_type: 'local',
+  bind_address: '127.0.0.1',
+  bind_port: 8080,
+  target_host: 'localhost',
+  target_port: 3000,
+  description: 'Dev server tunnel',
+  check_health: true,  // 可选：启用健康检查
+});
+```
+
+#### 4.6.2 规则管理
+
+```typescript
+// 列出所有转发规则
+const rules = await api.nodeListForwards(nodeId);
+
+// 停止转发
+await api.nodeStopForward(nodeId, forwardId);
+
+// 删除转发
+await api.nodeDeleteForward(nodeId, forwardId);
+
+// 重启转发
+await api.nodeRestartForward(nodeId, forwardId);
+```
+
+#### 4.6.3 完整 API 表
+
+| 前端函数 | 后端命令 | 说明 |
+|---------|---------|------|
+| `api.nodeListForwards(nodeId)` | `node_list_forwards` | 列出所有转发规则 |
+| `api.nodeCreateForward(request)` | `node_create_forward` | 创建转发规则 |
+| `api.nodeStopForward(nodeId, id)` | `node_stop_forward` | 停止转发 |
+| `api.nodeDeleteForward(nodeId, id)` | `node_delete_forward` | 删除转发 |
+| `api.nodeRestartForward(nodeId, id)` | `node_restart_forward` | 重启转发 |
+
+#### 4.6.4 ForwardRule 实体定义
+
+```typescript
+type ForwardType = 'local' | 'remote' | 'dynamic';
+
+interface ForwardRule {
+  id: string;
+  forward_type: ForwardType;
+  bind_address: string;
+  bind_port: number;
+  target_host: string;
+  target_port: number;
+  status: 'starting' | 'active' | 'stopped' | 'error' | 'suspended';
+  description?: string;
+}
+
+interface ForwardResponse {
+  success: boolean;
+  forward?: ForwardRuleDto;
+  error?: string;
+}
+```
+
+### 4.7 故障排除与自愈
+
+#### 4.7.1 自动重连行为
+
+当 SSH 连接断开时，转发系统执行以下自愈流程：
+
+```
+LinkDown → 所有规则标记 Suspended
+    → 重连成功
+        → 逐条恢复规则
+            → Restored (Active)
+    → 重连失败
+        → 保持 Suspended 等待下次重连
+```
+
+重连恢复是重连编排器（Reconnect Orchestrator，参见第 3 章）的 `restore-forwards` 阶段的一部分。编排器确保转发恢复在 SSH 连接建立且终端就绪之后执行。
+
+#### 4.7.2 死亡报告机制 (v1.4.1)
+
+转发任务异常退出时，后端通过 `ExitReason` 枚举上报退出原因：
+
+```rust
+enum ExitReason {
+    Normal,              // 正常关闭
+    SshDisconnect,       // SSH 连接断开
+    BindError(String),   // 端口绑定失败
+    IoError(String),     // I/O 错误
+    Timeout,             // 超时
+}
+```
+
+死亡报告通过 Tauri Event 发射至前端，前端更新对应规则的状态并显示错误信息。
+
+`HandleController` 提供 `subscribe_disconnect()` 接口，允许转发任务订阅 SSH 断连事件，实现快速感知和状态转换。
+
+#### 4.7.3 无锁 Channel I/O 架构 (v1.4.2)
+
+为消除端口转发中的锁竞争问题，v1.4.2 采用了基于消息传递的无锁架构：
+
+```
+local_reader → mpsc → ssh_io → mpsc → local_writer
+                                  ↑
+                            shutdown_rx (广播信号)
+```
+
+- **`local_reader`**：从本地 TCP socket 读取数据，发送至 mpsc channel
+- **`ssh_io`**：SSH 通道数据转发，消费本地数据并写入 SSH，同时从 SSH 读取并发送至 local_writer
+- **`local_writer`**：从 mpsc channel 消费数据，写入本地 TCP socket
+- **`shutdown_rx`**：tokio broadcast channel，用于向所有子任务传播关闭信号
+
+全链路超时保护：`FORWARD_IDLE_TIMEOUT` = 300 秒，空闲连接超时后自动清理。
+
+#### 4.7.4 常见错误处理
+
+| 错误 | 原因 | 处理方式 |
+|------|------|---------|
+| `EADDRINUSE` | 端口已被占用 | 提示用户更换端口或关闭占用该端口的进程 |
+| `EACCES` | 权限不足（绑定 <1024 端口） | 在 macOS/Linux 上需要 root 权限或使用 >1024 的端口 |
+| Remote Port Forward Failed | 远程服务器拒绝转发请求 | 检查远程 `sshd_config` 中 `GatewayPorts` 配置 |
+| SSH connection lost | SSH 连接中断 | 自动进入 Suspended 状态，等待重连编排器恢复 |
+
+### 4.8 安全最佳实践
+
+1. **最小权限绑定** — 默认绑定 `127.0.0.1` 而非 `0.0.0.0`，避免暴露端口到外部网络
+2. **连接池复用** — 转发规则共享 SSH 连接，通过引用计数管理。当 `ref_count` 降为 0 且 `keep_alive = false` 时启动空闲计时器
+3. **端口验证** — 创建规则前验证端口合法性（1-65535）
+4. **超时保护** — 空闲连接 300 秒超时自动清理，防止资源泄漏
+
+---
+
+## 5. SFTP 文件管理
+
+> 合并来源: `SFTP.md` (v1.4.0)
+
+### 5.1 功能概述
+
+OxideTerm 内置完整的 SFTP 文件管理器，提供类似本地文件管理器的操作体验。核心能力：
+
+- **双窗格视图** — 本地与远程文件并排浏览
+- **拖拽传输** — 支持文件和文件夹的拖拽上传/下载
+- **智能预览** — 支持文本、图片、视频、音频、PDF 等格式的在线预览
+- **传输队列** — 带进度条、暂停/继续/取消/重试的传输管理
+- **键盘操作** — 快捷键支持高效操作
+- **State Gating** — 所有操作受连接状态保护
+
+### 5.2 界面说明
+
+#### 5.2.1 双窗格布局
+
+```
+┌────────────────────────────┬────────────────────────────┐
+│  Local Files               │  Remote Files              │
+│  ┌─ Home ─ Up ─ Refresh ─┐│  ┌─ Home ─ Up ─ Refresh ─┐│
+│  │ 📁 Documents          │ │  │ 📁 /var/www/html     │ │
+│  │ 📁 Downloads          │ │  │ 📁 /home/user        │ │
+│  │ 📄 config.json   12KB │ │  │ 📄 index.html   5KB  │ │
+│  │ 📄 readme.md     3KB  │ │  │ 📄 app.js       25KB │ │
+│  └────────────────────────┘│  └────────────────────────┘│
+│  Path: ~/Documents         │  Path: /var/www/html       │
+├────────────────────────────┴────────────────────────────┤
+│  Transfer Queue: 2 active, 3 queued, 15 completed       │
+│  ████████████░░░░ config.json → /var/www/ 75% 1.2MB/s   │
+└─────────────────────────────────────────────────────────┘
+```
+
+#### 5.2.2 工具栏
+
+| 按钮 | 功能 |
+|------|------|
+| Home | 回到起始目录（本地：Home 目录；远程：登录目录） |
+| Up | 返回上级目录 |
+| Refresh | 刷新当前目录列表 |
+| New Folder | 创建新文件夹 |
+| Search | 在当前目录下搜索文件名 |
+
+#### 5.2.3 排序
+
+支持按以下维度排序（升序/降序）：
+- 名称
+- 大小
+- 修改时间
+
+文件夹始终排在文件之前。
+
+### 5.3 文件操作
+
+#### 5.3.1 基本操作
+
+| 操作 | 触发方式 |
+|------|---------|
+| 打开文件夹 | 双击 |
+| 选择文件 | 单击 |
+| 多选 | Ctrl/Cmd + 单击 |
+| 连续选择 | Shift + 单击 |
+| 全选 | Ctrl/Cmd + A |
+| 预览 | 空格键 / 右键菜单 |
+| 重命名 | F2 / 右键菜单 |
+| 删除 | Delete 键 / 右键菜单 |
+
+#### 5.3.2 传输操作
+
+| 操作 | 触发方式 |
+|------|---------|
+| 上传 | 从本地窗格拖拽到远程窗格 |
+| 下载 | 从远程窗格拖拽到本地窗格 |
+| 右键上传/下载 | 右键菜单 → Upload / Download |
+| 双击传输 | 双击文件直接传输到对侧窗格的当前目录 |
+
+#### 5.3.3 批量操作
+
+选择多个文件后，可批量执行：
+- 批量下载/上传
+- 批量删除
+- 批量传输加入队列
+
+### 5.4 文件预览
+
+SFTP 文件管理器支持丰富的文件格式在线预览：
+
+#### 5.4.1 格式支持表
+
+| 类别 | 支持格式 | 最大大小 | 说明 |
+|------|---------|---------|------|
+| **文本/代码** | `.txt`, `.md`, `.json`, `.xml`, `.yaml`, `.toml`, `.ini`, `.conf`, `.log`, `.csv`, `.js`, `.ts`, `.py`, `.rs`, `.go`, `.java`, `.c`, `.cpp`, `.sh` 等（19 种语言高亮） | 1 MB | CodeMirror 渲染，支持语法高亮 |
+| **图片** | PNG, JPG/JPEG, GIF, WebP, SVG, BMP, ICO | 10 MB | 内嵌查看器，支持缩放 |
+| **视频** | MP4, WebM, OGG, MOV, MKV | 50 MB | 内嵌播放器，支持播放控制 |
+| **音频** | MP3, WAV, OGG, FLAC, AAC, M4A | 50 MB | 内嵌播放器 |
+| **PDF** | PDF | 10 MB | 内嵌 PDF 查看器 |
+| **Office** | DOC/DOCX, XLS/XLSX, PPT/PPTX | 10 MB | 需安装 LibreOffice |
+| **Hex 视图** | 任意二进制文件 | 默认 16 KB | 十六进制查看，可增量加载更多数据 |
+
+预览通过 `nodeSftpPreview` API 实现，可选 `maxSize` 参数控制预览数据量。预览产生的临时文件通过 `cleanupSftpPreviewTemp` API 清理。
+
+### 5.5 传输管理
+
+#### 5.5.1 传输队列
+
+传输队列由 `transferStore`（Zustand store）管理，分四个分组：
+
+| 分组 | 说明 |
+|------|------|
+| 进行中 | 当前正在传输的文件 |
+| 等待中 | 排队等待传输的文件 |
+| 已完成 | 最近完成的传输记录（保留最新 50 条） |
+| 失败 | 传输失败的文件，可重试 |
+
+#### 5.5.2 进度显示
+
+```
+┌──────────────────────────────────────────────────┐
+│  ████████████░░░░  config.json                   │
+│  75%  1.2 MB / 1.6 MB  Speed: 1.2 MB/s          │
+│                            [Pause] [Cancel]      │
+├──────────────────────────────────────────────────┤
+│  ██████████████████ styles.css          ✓ Done   │
+│  100%  256 KB / 256 KB                           │
+├──────────────────────────────────────────────────┤
+│  ░░░░░░░░░░░░░░░░ bundle.js                     │
+│  Queued                                          │
+└──────────────────────────────────────────────────┘
+```
+
+#### 5.5.3 传输控制
+
+| 操作 | API | 说明 |
+|------|-----|------|
+| 暂停 | `sftpPauseTransfer(transferId)` | 暂停正在进行的传输 |
+| 继续 | `sftpResumeTransfer(transferId)` | 恢复暂停的传输 |
+| 取消 | `sftpCancelTransfer(transferId)` | 取消传输并清理 |
+| 重试 | 重新入队 | 对失败的传输重新执行 |
+
+#### 5.5.4 并发控制
+
+- 默认最大并发数：**3**
+- 可通过 `sftpUpdateSettings` 调整 `maxConcurrent` 和 `speedLimitKbps`
+- 传输统计通过 `sftpTransferStats` 查询（active / queued / completed）
+
+#### 5.5.5 Tar 加速传输
+
+对于目录传输，SFTP 支持基于 `tar` 的加速模式，将整个目录打包后传输以减少 SFTP 小文件开销：
+
+```typescript
+// 1. 探测远程服务器是否支持 tar
+const hasTar = await nodeSftpTarProbe(nodeId);
+
+// 2. 探测最佳压缩算法
+const compression = await nodeSftpTarCompressionProbe(nodeId);
+// 返回: 'zstd' | 'gzip' | 'none'
+
+// 3. 使用 tar 加速上传
+const fileCount = await nodeSftpTarUpload(
+  nodeId, localPath, remotePath, transferId, compression
+);
+
+// 4. 使用 tar 加速下载
+const fileCount = await nodeSftpTarDownload(
+  nodeId, remotePath, localPath, transferId, compression
+);
+```
+
+#### 5.5.6 断点续传
+
+```typescript
+// 列出未完成的传输
+const incomplete = await nodeSftpListIncompleteTransfers(nodeId);
+
+// 恢复传输
+await nodeSftpResumeTransfer(nodeId, transferId);
+```
+
+### 5.6 连接鲁棒性架构 (v1.4.0)
+
+SFTP 文件管理器遵循项目级系统不变量，实现了完整的连接鲁棒性保障。
+
+#### 5.6.1 State Gating（状态门禁）
+
+所有 SFTP 操作在执行前必须通过连接状态检查：
+
+```mermaid
+graph TD
+    A[用户操作] --> B{检查 connectionState}
+    B -->|active| C[执行 SFTP 操作]
+    B -->|connecting| D[显示 等待中...]
+    B -->|disconnected| E[显示 连接断开]
+    B -->|error| F[显示 错误信息]
+    C --> G[返回结果]
+```
+
+#### 5.6.2 Key-Driven Reset（键驱动重置）
+
+连接重建时，SFTP 组件自动重置并恢复：
+
+```mermaid
+sequenceDiagram
+    participant Backend as Rust Backend
+    participant AppStore as appStore
+    participant React as React Component
+    participant SFTP as SFTPView
+
+    Backend->>AppStore: emit connection:update
+    AppStore->>AppStore: refreshConnections()
+    AppStore->>React: nodeId state 变更
+    React->>SFTP: 旧组件 unmount (清理)
+    React->>SFTP: 新组件 mount (恢复)
+    SFTP->>SFTP: 从 Path Memory 恢复路径
+```
+
+#### 5.6.3 Path Memory（路径记忆）
+
+```typescript
+// sftpPathMemory: Map<nodeId, { local: string, remote: string }>
+```
+
+当连接断开并重连后，SFTP 组件会从 `sftpPathMemory` 中恢复用户之前浏览的远程路径，避免每次重连都回到根目录。
+
+#### 5.6.4 强一致性同步数据流
+
+```mermaid
+graph LR
+    TREE["sessionTreeStore<br/>(用户操作)"]
+    REG["Connection Registry<br/>(后端)"]
+    APP["appStore<br/>(事实层)"]
+    VIEW["ForwardsView / SFTPView"]
+    SFTP["SFTP Session"]
+
+    TREE -->|创建连接| REG
+    REG -->|connection:update| TREE
+    TREE -->|refreshConnections()| APP
+    APP -->|props/hooks| VIEW
+    VIEW -->|nodeSftpInit| SFTP
+```
+
+#### 5.6.5 TransferQueue 状态门禁
+
+`transferStore` 在节点断线时自动中断该节点所有进行中的传输，标记为失败状态。重连后用户可通过断点续传 API 恢复。
+
+### 5.7 API 参考
+
+#### 5.7.1 完整 API 表
+
+| 前端函数 | 后端命令 | 说明 |
+|---------|---------|------|
+| `nodeSftpInit(nodeId)` | `node_sftp_init` | 初始化 SFTP 会话 |
+| `nodeSftpListDir(nodeId, path)` | `node_sftp_list_dir` | 列出目录内容 |
+| `nodeSftpStat(nodeId, path)` | `node_sftp_stat` | 获取文件元信息 |
+| `nodeSftpPreview(nodeId, path, maxSize?)` | `node_sftp_preview` | 预览文件内容 |
+| `nodeSftpPreviewHex(nodeId, path, ...)` | `node_sftp_preview_hex` | Hex 预览 |
+| `nodeSftpWrite(nodeId, path, content, encoding?)` | `node_sftp_write` | 写入文件内容 |
+| `nodeSftpDownload(nodeId, remotePath, localPath, transferId?)` | `node_sftp_download` | 下载单文件 |
+| `nodeSftpUpload(nodeId, localPath, remotePath, transferId?)` | `node_sftp_upload` | 上传单文件 |
+| `nodeSftpDelete(nodeId, path)` | `node_sftp_delete` | 删除文件 |
+| `nodeSftpDeleteRecursive(nodeId, path)` | `node_sftp_delete_recursive` | 递归删除 |
+| `nodeSftpMkdir(nodeId, path)` | `node_sftp_mkdir` | 创建目录 |
+| `nodeSftpRename(nodeId, ...)` | `node_sftp_rename` | 重命名/移动 |
+| `nodeSftpDownloadDir(nodeId, remotePath, localPath, transferId?)` | `node_sftp_download_dir` | 下载目录 |
+| `nodeSftpUploadDir(nodeId, localPath, remotePath, transferId?)` | `node_sftp_upload_dir` | 上传目录 |
+| `nodeSftpTarProbe(nodeId)` | `node_sftp_tar_probe` | 探测 tar 支持 |
+| `nodeSftpTarCompressionProbe(nodeId)` | `node_sftp_tar_compression_probe` | 探测压缩算法 |
+| `nodeSftpTarUpload(nodeId, localPath, remotePath, transferId?, compression?)` | `node_sftp_tar_upload` | Tar 加速上传 |
+| `nodeSftpTarDownload(nodeId, remotePath, localPath, transferId?, compression?)` | `node_sftp_tar_download` | Tar 加速下载 |
+| `nodeSftpListIncompleteTransfers(nodeId)` | `node_sftp_list_incomplete_transfers` | 列出未完成传输 |
+| `nodeSftpResumeTransfer(nodeId, transferId)` | `node_sftp_resume_transfer` | 恢复传输 |
+| `cleanupSftpPreviewTemp(path?)` | `cleanup_sftp_preview_temp` | 清理预览临时文件 |
+
+#### 5.7.2 传输控制 API（全局，不按 nodeId）
+
+| 前端函数 | 后端命令 | 说明 |
+|---------|---------|------|
+| `sftpCancelTransfer(transferId)` | `sftp_cancel_transfer` | 取消传输 |
+| `sftpPauseTransfer(transferId)` | `sftp_pause_transfer` | 暂停传输 |
+| `sftpResumeTransfer(transferId)` | `sftp_resume_transfer` | 恢复传输 |
+| `sftpTransferStats()` | `sftp_transfer_stats` | 传输统计 |
+| `sftpUpdateSettings(maxConcurrent?, speedLimitKbps?)` | `sftp_update_settings` | 更新传输设置 |
+
+#### 5.7.3 返回值说明
+
+**`nodeSftpWrite` 返回值：**
+
+```typescript
+{
+  mtime: number | null;     // 修改时间戳
+  size: number | null;      // 文件大小
+  encodingUsed: string;     // 实际使用的编码
+  atomicWrite: boolean;     // 是否使用了原子写入
+}
+```
+
+当后端检测到目标文件系统支持原子写入时，`atomicWrite` 为 `true`，写入通过 `tmpfile → rename` 模式保证数据完整性。
+
+---
+
+## 6. 远程代理（Remote Agent）
+
+> 合并来源: `REMOTE_AGENT.md`
+
+### 6.1 概述
+
+OxideTerm Remote Agent 是一个无依赖的静态链接 Rust 二进制（约 600–670 KB），通过 SSH exec 通道部署到远程服务器并运行。它为 IDE 模式提供高性能的远程文件操作，在 Agent 不可用时自动降级至 SFTP。
+
+#### 核心优势
+
+| 能力 | 说明 |
+|------|------|
+| 原子写入 | 通过 `tmpfile → rename` 保证文件写入完整性 |
+| inotify 监视 | 实时检测远程文件变更 |
+| 哈希冲突检测 | SHA-256 `expected_hash` 防止覆盖他人修改 |
+| 服务器端搜索 | `grep` 在远程执行，减少数据传输 |
+| 深层目录树预取 | `listTree` 递归获取目录结构 |
+| 符号索引 | 远程项目符号索引、补全和定义查找 |
+
+### 6.2 架构
+
+```
+OxideTerm 应用 (Tauri + React)
+  ├── IDE 前端组件
+  │     ├── IdeTree (文件树)
+  │     ├── IdeEditor (代码编辑)
+  │     └── IdeSearch (全局搜索)
+  │
+  ├── agentService.ts (门面层, 14 函数)
+  │     └── Agent → SFTP 自动降级
+  │
+  ├── api.ts (底层 IPC 调用)
+  │
+  └── Rust 后端
+        ├── AgentTransport (SSH exec 通道通信)
+        ├── AgentDeployer (自动部署 + 架构检测)
+        └── AgentRegistry (实例生命周期管理)
+              │
+              └── SSH exec 通道 ───── 远程主机
+                                        └── oxideterm-agent
+                                              ├── main.rs (请求分发)
+                                              ├── fs_ops.rs (文件操作)
+                                              ├── protocol.rs (JSON-RPC 编解码)
+                                              ├── watcher.rs (inotify 监视)
+                                              └── symbols.rs (符号索引)
+```
+
+### 6.3 通信协议
+
+Agent 使用**行分隔 JSON-RPC** 协议，通过 SSH exec 通道的 stdin/stdout 通信。
+
+#### 6.3.1 请求格式
+
+```json
+{"id": 1, "method": "fs/readFile", "params": {"path": "/home/user/app.js"}}
+```
+
+#### 6.3.2 响应格式
+
+```json
+{"id": 1, "result": {"content": "...", "hash": "sha256:abc123..."}}
+```
+
+#### 6.3.3 错误格式
+
+```json
+{"id": 1, "error": {"code": -2, "message": "File not found: /home/user/missing.txt"}}
+```
+
+#### 6.3.4 通知格式（服务器 → 客户端推送，无 id 字段）
+
+```json
+{"method": "watch/event", "params": {"type": "modified", "path": "/home/user/app.js"}}
+```
+
+### 6.4 支持的方法
+
+#### 6.4.1 文件系统 `fs/*`
+
+| 方法 | 说明 | 参数 |
+|------|------|------|
+| `fs/readFile` | 读取文件内容 | `path`, `max_size?` |
+| `fs/writeFile` | 原子写入文件 | `path`, `content`, `expected_hash?` |
+| `fs/stat` | 获取文件元信息 | `path` |
+| `fs/listDir` | 列出目录内容 | `path` |
+| `fs/listTree` | 递归获取目录树 | `path`, `depth?`, `max_entries?` |
+| `fs/mkdir` | 创建目录 | `path` |
+| `fs/remove` | 删除文件或目录 | `path`, `recursive?` |
+| `fs/rename` | 重命名/移动 | `from`, `to` |
+| `fs/chmod` | 修改文件权限 | `path`, `mode` |
+
+#### 6.4.2 搜索 `search/*`
+
+| 方法 | 说明 | 参数 |
+|------|------|------|
+| `search/grep` | 文本搜索 | `pattern`, `path`, `case_sensitive?`, `max_results?`, `ignore?` |
+
+#### 6.4.3 文件监视 `watch/*`
+
+| 方法 | 说明 | 参数 |
+|------|------|------|
+| `watch/start` | 开始监视目录变更 | `path`, `ignore?` |
+| `watch/stop` | 停止监视 | `path` |
+
+监视事件通过通知消息推送（参见 6.3.4）。
+
+#### 6.4.4 Git `git/*`
+
+| 方法 | 说明 | 参数 |
+|------|------|------|
+| `git/status` | 获取 Git 仓库状态 | `path` |
+
+#### 6.4.5 符号 `symbols/*`
+
+| 方法 | 说明 | 参数 |
+|------|------|------|
+| `symbols/index` | 索引项目符号 | `path`, `max_files?` |
+| `symbols/complete` | 符号自动补全 | `path`, `prefix`, `limit?` |
+| `symbols/definitions` | 查找符号定义 | `path`, `name` |
+
+#### 6.4.6 系统 `sys/*`
+
+| 方法 | 说明 | 参数 | 返回 |
+|------|------|------|------|
+| `sys/info` | 版本和系统信息 | 无 | `{ version, arch, os, pid, capabilities }` |
+| `sys/ping` | 健康检查 | 无 | `{ pong: true }` |
+| `sys/shutdown` | 优雅关闭 Agent | 无 | `{ ok: true }` |
+
+`sys/info` 返回的 `capabilities` 字段标识 Agent 支持的可选能力（如 `["zstd"]`），前端据此做功能协商。
+
+### 6.5 部署流程
+
+Agent 自动部署，用户无感：
+
+```mermaid
+graph TD
+    A[IDE 模式启动] --> B[检测远程架构]
+    B --> C{架构匹配?}
+    C -->|是| D[版本检查]
+    C -->|否| Z[降级到 SFTP]
+    D -->|需更新| E[上传 Agent 二进制]
+    D -->|已最新| G[启动 Agent]
+    E --> F[chmod +x]
+    F --> G
+    G --> H[JSON-RPC 握手<br/>sys/info]
+    H -->|成功| I[Agent 就绪 🟢]
+    H -->|失败| Z
+```
+
+### 6.6 支持的目标架构
+
+#### 主要架构（CI 自动构建，内嵌应用包）
+
+| 架构 | 二进制名 | 大小 |
+|------|---------|------|
+| x86_64 (Intel/AMD) | `oxideterm-agent-x86_64-linux-musl` | ~670 KB |
+| aarch64 (ARM64) | `oxideterm-agent-aarch64-linux-musl` | ~600 KB |
+
+#### 扩展架构（位于 `agents/extra/`，按需使用）
+
+| 架构 | 二进制名 |
+|------|---------|
+| aarch64-android | `oxideterm-agent-aarch64-android` |
+| arm (32-bit) | `oxideterm-agent-arm-linux-musleabihf` |
+| armv7 | `oxideterm-agent-armv7-linux-musleabihf` |
+| i686 (32-bit x86) | `oxideterm-agent-i686-linux-musl` |
+| loongarch64 | `oxideterm-agent-loongarch64-linux-gnu` |
+| powerpc64le | `oxideterm-agent-powerpc64le-linux-gnu` |
+| riscv64 | `oxideterm-agent-riscv64gc-linux-gnu` |
+| s390x | `oxideterm-agent-s390x-linux-gnu` |
+| x86_64-freebsd | `oxideterm-agent-x86_64-freebsd` |
+
+所有二进制均为静态链接（musl libc 或相应系统 libc），无外部运行时依赖。
+
+### 6.7 安全性
+
+| 安全措施 | 说明 |
+|---------|------|
+| 进程隔离 | Agent 以当前 SSH 用户权限运行，不提权 |
+| 自清理 | SSH 连接断开后，Agent 通过 stdin EOF 检测并自行退出 |
+| 无网络监听 | Agent 不打开任何网络端口，仅通过 stdin/stdout 通信 |
+| 最小权限 | 只能访问 SSH 用户有权限的文件 |
+| 静态链接 | 不依赖远程服务器的动态库，避免供应链问题 |
+
+### 6.8 设计原则
+
+1. **零异步运行时** — 使用 `std::thread` + 阻塞 I/O，不引入 tokio/async-std，保持二进制最小化
+2. **最少依赖** — 仅依赖：`serde`、`serde_json`、`inotify`（Linux）、`libc`、`zstd`
+3. **静态 musl 链接** — 生成完全静态的二进制，无需远程服务器安装任何库
+4. **优雅降级** — Agent 不可用时自动回退到 SFTP（文件读写、目录列表），仅 Agent-only 功能（grep、watch、symbols、listTree、gitStatus）不可用
+
+### 6.9 原子写入机制
+
+Agent 的 `fs/writeFile` 实现原子写入以防止数据丢失：
+
+```
+1. 写入临时文件: /path/to/.file.tmp.XXXXXX
+2. 如果提供 expected_hash:
+   a. 读取目标文件当前内容
+   b. 计算 SHA-256 哈希
+   c. 与 expected_hash 比对
+   d. 不匹配则返回冲突错误，删除临时文件
+3. rename(临时文件 → 目标文件)  // 原子操作
+4. 返回新文件的哈希值
+```
+
+`expected_hash` 机制用于乐观并发控制——当多人同时编辑同一文件时，检测并报告冲突。
+
+### 6.10 inotify 文件监视
+
+Agent 在 Linux 上使用 inotify 实现文件监视：
+
+- **递归监视** — 自动为子目录创建 inotify watch
+- **`.gitignore` 排除** — 解析 `.gitignore` 规则跳过不需要监视的路径（如 `node_modules/`）
+- **非阻塞 fd** — 使用 `O_NONBLOCK` 文件描述符，通过 `poll()` 等待事件
+- **事件去重** — 同一文件的快速连续变更会被合并
+- **平台回退** — 非 Linux 系统（如 FreeBSD、Android）不支持 inotify，`watch/*` 方法返回错误
+
+### 6.11 构建说明
+
+```bash
+# 添加交叉编译目标
+rustup target add x86_64-unknown-linux-musl
+rustup target add aarch64-unknown-linux-musl
+
+# 使用构建脚本（需安装 musl-cross 工具链）
+./scripts/build-agent.sh
+
+# 手动构建
+cd agent
+cargo build --release --target x86_64-unknown-linux-musl
+```
+
+CI 自动构建两个主要架构（x86_64、aarch64），扩展架构按需手动构建。
+
+### 6.12 前端集成
+
+#### 6.12.1 状态指示
+
+IDE 模式界面显示 Agent 连接状态：
+
+| 指示 | 含义 |
+|------|------|
+| 🟢 Agent | Agent 已部署并就绪 |
+| 🟡 Deploying | Agent 正在部署中 |
+| ⚪ SFTP | Agent 不可用，使用 SFTP 回退 |
+
+#### 6.12.2 agentStore
+
+`agentStore`（`src/store/agentStore.ts`）是专用 Zustand store，管理 Agent 任务状态与历史记录。
+
+#### 6.12.3 agentService 门面层
+
+`agentService.ts`（`src/lib/agentService.ts`）导出 14 个函数，提供统一的 Agent 操作接口，内置 Agent → SFTP 自动降级逻辑：
+
+| 函数 | 说明 | 降级行为 |
+|------|------|---------|
+| `isAgentReady(nodeId)` | 检查 Agent 可用性（带缓存） | — |
+| `ensureAgent(nodeId)` | 部署 Agent（幂等去重） | — |
+| `invalidateAgentCache(nodeId)` | 清除可用性缓存 | — |
+| `removeAgent(nodeId)` | 移除远程 Agent | — |
+| `readFile(nodeId, path)` | 读取文件 | → SFTP 回退 |
+| `writeFile(nodeId, path, content, expectHash?)` | 写入文件 | → SFTP 回退 |
+| `listDir(nodeId, path)` | 列出目录 | → SFTP 回退 |
+| `listTree(nodeId, path, maxDepth?, maxEntries?)` | 递归目录树 | Agent only |
+| `grep(nodeId, pattern, path, opts?)` | 文本搜索 | Agent only |
+| `gitStatus(nodeId, path)` | Git 状态 | Agent only |
+| `watchDirectory(nodeId, path, onEvent, ignore?)` | 文件监视 | Agent only |
+| `symbolIndex(nodeId, path, maxFiles?)` | 符号索引 | Agent only |
+| `symbolComplete(nodeId, path, prefix, limit?)` | 符号补全 | Agent only |
+| `symbolDefinitions(nodeId, path, name)` | 符号定义查找 | Agent only |
+
+#### 6.12.4 底层 Agent API（api.ts）
+
+| 前端函数 | 后端命令 |
+|---------|---------|
+| `nodeAgentDeploy(nodeId)` | `node_agent_deploy` |
+| `nodeAgentRemove(nodeId)` | `node_agent_remove` |
+| `nodeAgentStatus(nodeId)` | `node_agent_status` |
+| `nodeAgentReadFile(nodeId, path)` | `node_agent_read_file` |
+| `nodeAgentWriteFile(nodeId, path, content, expectHash?)` | `node_agent_write_file` |
+| `nodeAgentListTree(nodeId, path, maxDepth?, maxEntries?)` | `node_agent_list_tree` |
+| `nodeAgentGrep(nodeId, pattern, path, caseSensitive?, maxResults?)` | `node_agent_grep` |
+| `nodeAgentGitStatus(nodeId, path)` | `node_agent_git_status` |
+| `nodeAgentWatchStart(nodeId, path, ignore?)` | `node_agent_watch_start` |
+| `nodeAgentWatchStop(nodeId, path)` | `node_agent_watch_stop` |
+| `nodeAgentStartWatchRelay(nodeId)` | `node_agent_start_watch_relay` |
+| `nodeAgentSymbolIndex(nodeId, path, maxFiles?)` | `node_agent_symbol_index` |
+| `nodeAgentSymbolComplete(nodeId, path, prefix, limit?)` | `node_agent_symbol_complete` |
+| `nodeAgentSymbolDefinitions(nodeId, path, name)` | `node_agent_symbol_definitions` |
+
+#### 6.12.5 设计要点
+
+- **按需加载** — 不做深度预取，用户展开目录时才加载子级
+- **AbortController 去重** — 防止同时发起重复的 Agent 请求
+- **路径解析** — Agent 内部 `resolve_path()` 将 `~` 展开为 `$HOME`
+
+### 6.13 故障排查
+
+| 症状 | 原因 | 解决方案 |
+|------|------|---------|
+| 始终使用 SFTP，不部署 Agent | 远程架构不在支持列表 | 检查 `uname -m`，可手动放置对应架构的二进制到 `agents/extra/` |
+| Agent 部署失败 | SELinux 或 `noexec` 挂载选项 | 检查 `/tmp` 或 Agent 部署目录的挂载选项和 SELinux 策略 |
+| 文件监视不工作 | inotify watch 数量达到系统限制 | 增大 `fs.inotify.max_user_watches`（`echo 65536 > /proc/sys/fs/inotify/max_user_watches`） |
+| Agent 未自动退出 | stdin EOF 未正确传播 | 检查 SSH 连接是否正常关闭；Agent 在 stdin 关闭后自行退出 |
+
+---
+
+## 7. SSH Agent 认证
+
+> 合并来源: `SSH_AGENT_STATUS.md`
+
+### 7.1 实现概览
+
+OxideTerm 完整支持 SSH Agent 认证方式，允许用户通过系统 SSH Agent（如 `ssh-agent`、gpg-agent、1Password SSH Agent 等）进行免密码认证。该功能覆盖了从类型系统、UI、持久化到核心认证流程的完整链路。
+
+### 7.2 类型系统支持
+
+#### 7.2.1 Rust 后端类型
+
+```rust
+// 认证方式枚举
+enum AuthMethod {
+    Password(String),
+    PrivateKey { key_path: String, passphrase: Option<String> },
+    Agent,  // ← SSH Agent 认证
+    // ...
+}
+
+// 持久化保存的认证信息
+enum SavedAuth {
+    Password(String),
+    PrivateKey { key_path: String, passphrase: Option<String> },
+    Agent,  // ← 保存为 Agent 方式
+    // ...
+}
+
+// 加密存储的认证信息（.oxide 文件导入导出）
+enum EncryptedAuth {
+    Password(EncryptedString),
+    PrivateKey { key_path: String, passphrase: Option<EncryptedString> },
+    Agent,  // ← 加密导出支持
+    // ...
+}
+```
+
+#### 7.2.2 TypeScript 前端类型
+
+SSH Agent 认证在以下前端类型中均有支持：
+
+- `ConnectRequest` — 连接请求
+- `ConnectionInfo` — 连接信息
+- `ProxyHopConfig` — 跳板机配置（跳板机同样支持 Agent 认证）
+- `SaveConnectionRequest` — 保存连接请求
+
+### 7.3 UI 支持
+
+以下 UI 组件完整支持 SSH Agent 认证方式的选择和配置：
+
+| 组件 | 说明 |
+|------|------|
+| `NewConnectionModal` | 新建连接时可选择 "SSH Agent" 认证方式 |
+| `EditConnectionModal` | 编辑已有连接时可切换认证方式 |
+| `AddJumpServerDialog` | 跳板机认证同样支持 Agent 方式 |
+
+选择 Agent 认证时，UI 不显示密码或密钥文件输入框，仅显示 Agent 可用性状态提示。
+
+### 7.4 持久化与导入导出
+
+- 连接配置中 `auth_method: "agent"` 被持久化到本地数据库（redb）
+- `.oxide` 加密导出文件中包含 Agent 认证标记（`EncryptedAuth::Agent`）
+- 导入 `.oxide` 文件时正确恢复 Agent 认证配置
+
+### 7.5 跨平台检测
+
+| 平台 | 检测方式 | Agent Socket |
+|------|---------|-------------|
+| Unix (macOS/Linux) | 检查 `SSH_AUTH_SOCK` 环境变量 | Unix domain socket |
+| Windows | 检测 named pipe | `\\.\pipe\openssh-ssh-agent` |
+
+```rust
+// connect_v2.rs
+pub fn is_ssh_agent_available() -> bool {
+    #[cfg(unix)]
+    { std::env::var("SSH_AUTH_SOCK").is_ok() }
+    #[cfg(windows)]
+    { /* named pipe 检测 */ }
+}
+```
+
+### 7.6 错误处理
+
+Agent 认证可能遇到的错误及处理：
+
+| 错误场景 | 处理方式 |
+|---------|---------|
+| Agent 不可用（`SSH_AUTH_SOCK` 未设置） | 提示用户启动 ssh-agent 或检查环境变量 |
+| Agent 中无匹配密钥 | 遍历所有公钥后返回认证失败 |
+| Agent 连接中断 | 返回 I/O 错误，用户可重试 |
+| 服务器不支持 publickey 认证 | 提示切换其他认证方式 |
+
+### 7.7 核心认证流程（AgentSigner）
+
+认证实现位于 `src-tauri/src/ssh/agent.rs`，核心组件：
+
+- **`SshAgentClient`** — 与系统 SSH Agent 通信的客户端
+- **`AgentSigner`** — 实现 russh `Signer` trait 的包装器
+
+#### 认证时序
+
+```mermaid
+sequenceDiagram
+    participant OT as OxideTerm
+    participant Agent as SSH Agent
+    participant Server as SSH Server
+
+    OT->>Agent: 连接 Agent (SSH_AUTH_SOCK)
+    OT->>Agent: 请求公钥列表
+    Agent-->>OT: 返回 [pubkey1, pubkey2, ...]
+    loop 逐个尝试
+        OT->>Server: authenticate_publickey_with(user, pubkey, AgentSigner)
+        Server-->>OT: 签名挑战
+        OT->>Agent: sign_request(data, pubkey)
+        Agent-->>OT: 签名结果
+        OT->>Server: 提交签名
+        alt 认证成功
+            Server-->>OT: ✅ 认证通过
+        else 认证失败
+            Server-->>OT: ❌ 尝试下一个密钥
+        end
+    end
+```
+
+**关键实现细节：**
+
+- 使用 `authenticate_publickey_with()` 而非 `authenticate_publickey()`，因为需要传入自定义 `Signer`
+- `AgentSigner` 解决了 russh RPITIT 中 `&PublicKey` 引用跨 async 边界的 `Send` 问题：通过克隆 `PublicKey` 为 owned 值，避免 future 中持有非 `Send` 引用
+
+### 7.8 验收标准
+
+| 验收项 | 状态 |
+|-------|------|
+| 新建连接可选择 Agent 认证 | ✅ |
+| 编辑连接可切换至/从 Agent | ✅ |
+| 跳板机支持 Agent | ✅ |
+| Agent 认证成功连接 | ✅ |
+| 连接持久化保存 Agent 方式 | ✅ |
+| .oxide 导入导出 Agent 配置 | ✅ |
+| Agent 不可用时给出提示 | ✅ |
+| 跨平台检测 (Unix/Windows) | ✅ |
+
+### 7.9 未来计划
+
+| 计划 | 说明 |
+|------|------|
+| Agent Forwarding | SSH Agent 转发，允许在远程服务器上使用本地 Agent 密钥 |
+| 跨平台集成测试 | 自动化测试覆盖 macOS、Linux、Windows |
+| Windows Named Pipe 预检测 | 在连接前更准确地检测 Windows Agent 可用性 |
+
+### 7.10 参考资料
+
+- [RFC 4251](https://tools.ietf.org/html/rfc4251) — SSH 协议架构
+- [RFC 4252](https://tools.ietf.org/html/rfc4252) — SSH 认证协议
+- [PROTOCOL.agent](https://github.com/openssh/openssh-portable/blob/master/PROTOCOL.agent) — SSH Agent 协议规范
+- [russh 文档](https://docs.rs/russh/) — Rust SSH 库
+
+### 7.11 开发者注意事项
+
+修改 SSH Agent 认证相关代码时，需注意以下文件的一致性：
+
+| 文件 | 作用 |
+|------|------|
+| `src-tauri/src/ssh/agent.rs` | `SshAgentClient` + `AgentSigner` 核心实现 |
+| `src-tauri/src/session/connection_registry.rs` | `AuthMethod::Agent` 变体处理 |
+| `src-tauri/src/ssh/proxy.rs` | 跳板机 Agent 认证支持 |
+| `src-tauri/src/ssh/client.rs` | SSH 客户端 Agent 认证分支 |
+| `src-tauri/src/ssh/connect_v2.rs` | `is_ssh_agent_available()` 检测函数 |
+
+### 7.12 更新日志
+
+| 日期 | 变更 |
+|------|------|
+| 2026-01-14 | 完整类型系统、UI 支持、持久化与导入导出 |
+| 2026-02-07 | 核心认证流程（AgentSigner）完成 |
+
+---
+
+## 附录
+
+### A. 跨章引用索引
+
+以下概念跨多个章节出现，列出所有涉及章节以便交叉参考：
+
+| 概念 | 涉及章节 | 说明 |
+|------|---------|------|
+| **nodeId 路由** | 2, 3, 4, 5, 6 | 所有 API 均通过 nodeId 路由到具体连接，取代旧的 sessionId 寻址；重连编排器按 nodeId 调度恢复 |
+| **State Gating（状态门禁）** | 1, 2, 3, 4, 5 | UI 操作须检查 `connectionState === 'active'`；连接池、拓扑、端口转发和 SFTP 均遵守此规则 |
+| **Key-Driven Reset** | 1, 2, 3, 4, 5 | 连接重建触发组件重挂载机制；连接池核心策略，拓扑级联、重连编排、端口转发和 SFTP 均利用此机制恢复状态 |
+| **强一致性同步** | 1, 2, 3, 4, 5 | appStore 刷新驱动 UI 更新；第 1 章定义核心流程，后续章节为各模块的具体应用 |
+| **重连编排器（Reconnect Orchestrator）** | 1, 3, 4, 5 | 管理断线重连后的恢复流程，含 `restore-forwards` 和 `resume-transfers` 阶段；第 1 章历史债务清理提及，第 3 章完整设计 |
+| **sessionTreeStore / appStore 双 Store** | 1, 4, 5 | 用户意图层与事实层分离，第 1 章定义架构拓扑，所有功能模块从 appStore 读取连接状态 |
+| **级联故障传播** | 2, 3 | 跳板机断开时下游节点级联标记 link_down；第 2 章级联故障处理，第 3 章 snapshot 阶段捕获 |
+| **transferStore** | 5 | SFTP 专用传输队列 Zustand store |
+| **agentService / agentStore** | 6 | Remote Agent 状态管理与门面层 |
+| **原子写入** | 5, 6 | SFTP `nodeSftpWrite` 和 Agent `fs/writeFile` 均支持原子写入（tmpfile → rename） |
+| **Agent → SFTP 降级** | 5, 6 | agentService 中文件操作自动降级到 SFTP；SFTP 是基础能力层 |
+| **SSH 连接** | 1, 2, 3, 4, 5, 6, 7 | 全系统基础设施；第 1 章连接池管理，第 2 章多跳路由，第 7 章 Agent 认证 |
+| **Tauri IPC** | 1, 3, 4, 5, 6 | 前端通过 `invoke()` 调用后端命令；第 1 章 `ssh_list_connections()`，第 3 章 `probeSingleConnection` |
+| **Tauri Event** | 1, 3, 4, 5 | 连接状态变更事件驱动全系统响应；第 1 章 `connection_status_changed`，第 3 章触发 `scheduleReconnect` |
+| **ForwardStatus::Suspended** | 3, 4 | 端口转发在断线时进入 Suspended，重连编排器在 restore-forwards 阶段恢复 |
+| **`useNodeState` hook** | 4, 5 | 前端组件通过此 hook 感知连接就绪状态 |
+| **JSON-RPC 协议** | 6 | Agent 通信协议，行分隔 JSON-RPC via SSH exec stdin/stdout |
+| **russh** | 7 | SSH 协议库，Agent 认证中 `Signer` trait 的实现基础 |
+| **跳板机（Proxy Hop）** | 2, 7 | 第 2 章 proxy_chain 路由配置，第 7 章 Agent 认证跳板机支持 |
+| **OS Keychain** | 7 | 密码存储在系统钥匙串，Agent 认证不涉及密码 |
+| **`.oxide` 加密文件** | 7 | ChaCha20-Poly1305 加密的连接配置导出格式，支持 Agent 认证方式 |
+| **RefCount 引用计数** | 1 | 连接池引用计数系统，控制 Active ↔ Idle 状态转换和空闲回收 |
+| **Dijkstra 路径计算** | 2 | 网络拓扑最短路径算法，计算 local → target 的最优跳板链路 |
+| **Grace Period** | 3 | v1.11.1 新增，重连前探测旧连接是否仍存活（30s），避免不必要地销毁 TUI 应用 |
+| **WsBridge 心跳** | 1 | WebSocket 本地心跳，超时 300s（容忍 macOS App Nap） |
+| **ConnectionPoolConfig** | 1 | 连接池配置结构体：idleTimeoutSecs、maxConnections、protectOnExit |
+| **proxy_chain** | 2 | 多跳 SSH 跳板机链路配置，存储于 SessionTreeStore 的连接定义中 |
+| **ReconnectSnapshot** | 3 | 重连快照结构，捕获断线时的完整会话状态用于恢复 |
+
+### B. API 快速参考汇总表
+
+全部 API 函数一览，按功能域分类。
+
+#### B.1 端口转发 API
+
+| 前端函数 | 后端命令 | 参数 |
+|---------|---------|------|
+| `api.nodeListForwards(nodeId)` | `node_list_forwards` | `nodeId` |
+| `api.nodeCreateForward(request)` | `node_create_forward` | `nodeId, forwardType, bindAddress, bindPort, targetHost, targetPort, description?, checkHealth?` |
+| `api.nodeStopForward(nodeId, id)` | `node_stop_forward` | `nodeId, forwardId` |
+| `api.nodeDeleteForward(nodeId, id)` | `node_delete_forward` | `nodeId, forwardId` |
+| `api.nodeRestartForward(nodeId, id)` | `node_restart_forward` | `nodeId, forwardId` |
+
+#### B.2 SFTP 文件管理 API
+
+| 前端函数 | 后端命令 |
+|---------|---------|
+| `nodeSftpInit(nodeId)` | `node_sftp_init` |
+| `nodeSftpListDir(nodeId, path)` | `node_sftp_list_dir` |
+| `nodeSftpStat(nodeId, path)` | `node_sftp_stat` |
+| `nodeSftpPreview(nodeId, path, maxSize?)` | `node_sftp_preview` |
+| `nodeSftpPreviewHex(nodeId, ...)` | `node_sftp_preview_hex` |
+| `nodeSftpWrite(nodeId, path, content, encoding?)` | `node_sftp_write` |
+| `nodeSftpDownload(nodeId, remotePath, localPath, transferId?)` | `node_sftp_download` |
+| `nodeSftpUpload(nodeId, localPath, remotePath, transferId?)` | `node_sftp_upload` |
+| `nodeSftpDelete(nodeId, path)` | `node_sftp_delete` |
+| `nodeSftpDeleteRecursive(nodeId, path)` | `node_sftp_delete_recursive` |
+| `nodeSftpMkdir(nodeId, path)` | `node_sftp_mkdir` |
+| `nodeSftpRename(nodeId, ...)` | `node_sftp_rename` |
+| `nodeSftpDownloadDir(nodeId, remotePath, localPath, transferId?)` | `node_sftp_download_dir` |
+| `nodeSftpUploadDir(nodeId, localPath, remotePath, transferId?)` | `node_sftp_upload_dir` |
+| `nodeSftpTarProbe(nodeId)` | `node_sftp_tar_probe` |
+| `nodeSftpTarCompressionProbe(nodeId)` | `node_sftp_tar_compression_probe` |
+| `nodeSftpTarUpload(nodeId, localPath, remotePath, transferId?, compression?)` | `node_sftp_tar_upload` |
+| `nodeSftpTarDownload(nodeId, remotePath, localPath, transferId?, compression?)` | `node_sftp_tar_download` |
+| `nodeSftpListIncompleteTransfers(nodeId)` | `node_sftp_list_incomplete_transfers` |
+| `nodeSftpResumeTransfer(nodeId, transferId)` | `node_sftp_resume_transfer` |
+| `cleanupSftpPreviewTemp(path?)` | `cleanup_sftp_preview_temp` |
+| `sftpCancelTransfer(transferId)` | `sftp_cancel_transfer` |
+| `sftpPauseTransfer(transferId)` | `sftp_pause_transfer` |
+| `sftpResumeTransfer(transferId)` | `sftp_resume_transfer` |
+| `sftpTransferStats()` | `sftp_transfer_stats` |
+| `sftpUpdateSettings(maxConcurrent?, speedLimitKbps?)` | `sftp_update_settings` |
+
+#### B.3 Remote Agent API
+
+| 前端函数 | 后端命令 |
+|---------|---------|
+| `nodeAgentDeploy(nodeId)` | `node_agent_deploy` |
+| `nodeAgentRemove(nodeId)` | `node_agent_remove` |
+| `nodeAgentStatus(nodeId)` | `node_agent_status` |
+| `nodeAgentReadFile(nodeId, path)` | `node_agent_read_file` |
+| `nodeAgentWriteFile(nodeId, path, content, expectHash?)` | `node_agent_write_file` |
+| `nodeAgentListTree(nodeId, path, maxDepth?, maxEntries?)` | `node_agent_list_tree` |
+| `nodeAgentGrep(nodeId, pattern, path, caseSensitive?, maxResults?)` | `node_agent_grep` |
+| `nodeAgentGitStatus(nodeId, path)` | `node_agent_git_status` |
+| `nodeAgentWatchStart(nodeId, path, ignore?)` | `node_agent_watch_start` |
+| `nodeAgentWatchStop(nodeId, path)` | `node_agent_watch_stop` |
+| `nodeAgentStartWatchRelay(nodeId)` | `node_agent_start_watch_relay` |
+| `nodeAgentSymbolIndex(nodeId, path, maxFiles?)` | `node_agent_symbol_index` |
+| `nodeAgentSymbolComplete(nodeId, path, prefix, limit?)` | `node_agent_symbol_complete` |
+| `nodeAgentSymbolDefinitions(nodeId, path, name)` | `node_agent_symbol_definitions` |
+
+#### B.4 agentService 门面层 API
+
+| 函数 | 降级行为 |
+|------|---------|
+| `isAgentReady(nodeId)` | — |
+| `ensureAgent(nodeId)` | — |
+| `invalidateAgentCache(nodeId)` | — |
+| `removeAgent(nodeId)` | — |
+| `readFile(nodeId, path)` | → SFTP |
+| `writeFile(nodeId, path, content, expectHash?)` | → SFTP |
+| `listDir(nodeId, path)` | → SFTP |
+| `listTree(nodeId, path, maxDepth?, maxEntries?)` | Agent only |
+| `grep(nodeId, pattern, path, opts?)` | Agent only |
+| `gitStatus(nodeId, path)` | Agent only |
+| `watchDirectory(nodeId, path, onEvent, ignore?)` | Agent only |
+| `symbolIndex(nodeId, path, maxFiles?)` | Agent only |
+| `symbolComplete(nodeId, path, prefix, limit?)` | Agent only |
+| `symbolDefinitions(nodeId, path, name)` | Agent only |
