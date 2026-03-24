@@ -1,7 +1,7 @@
 # OxideTerm 核心系统参考文档
 
 > **项目版本**: v0.20.1  
-> **文档状态**: 合并自 7 份独立参考文档  
+> **文档状态**: 合并自 9 份独立参考文档  
 > **最后更新**: 2026-03-24
 
 ---
@@ -15,6 +15,8 @@
 - [5. SFTP 文件管理](#5-sftp-文件管理)
 - [6. 远程代理（Remote Agent）](#6-远程代理remote-agent)
 - [7. SSH Agent 认证](#7-ssh-agent-认证)
+- [8. 资源监控器（Resource Profiler）](#8-资源监控器resource-profiler)
+- [9. 远程环境探测器（Environment Detector）](#9-远程环境探测器environment-detector)
 - [附录](#附录)
 
 ---
@@ -2273,6 +2275,872 @@ sequenceDiagram
 
 ---
 
+## 8. 资源监控器（Resource Profiler）
+
+> 合并来源: `RESOURCE_PROFILER.md`
+> 代码验证: 2026-03-24
+
+实时采样远程主机的 CPU、内存、负载和网络指标，通过持久化 SSH Shell 通道实现低开销监控。同时集成**智能端口检测**功能，扫描远程监听端口并检测变更，支持一键端口转发（类似 VS Code Remote SSH）。
+
+### 8.1 核心特性
+
+| 特性 | 说明 |
+|------|------|
+| **持久化通道** | 整个生命周期仅打开 **1 个** Shell Channel，避免 MaxSessions 耗尽 |
+| **轻量采样** | 精简命令输出 ~500-1.5KB（仅读取 `/proc` 中的关键行） |
+| **自动生命周期** | SSH 断连 → 自动停止；重连 → 可重新启动 |
+| **优雅降级** | 非 Linux 主机或连续失败后自动降级为 RTT-Only 模式 |
+| **Delta 计算** | CPU% 和网络速率基于两次采样的差值，首次采样返回 `None` |
+| **智能端口检测** | 平台分发端口扫描 + Docker 容器检测，差异事件驱动前端通知 |
+
+### 8.2 架构概览
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                        Frontend                              │
+│                                                              │
+│  profilerStore ◄──── Tauri Event ◄──── "profiler:update:{id}"│
+│  (Zustand)           (JSON payload)                          │
+│       │                                                      │
+│       ├─ metrics: ResourceMetrics | null                     │
+│       ├─ history: ResourceMetrics[] (max 60)                 │
+│       ├─ isRunning / isEnabled / error                       │
+│       └─ _generations: Map (防 StrictMode 竞态)              │
+│                                                              │
+│  usePortDetection(connId) ◄── "port-detected:{id}" ◄───┐    │
+│       ├─ newPorts / allPorts / dismissPort              │    │
+│       └─ 12s 轮询 api.getDetectedPorts()               │    │
+│                                                         │    │
+│  api.startResourceProfiler(connId)  ──► Tauri IPC ──►  │    │
+│  api.stopResourceProfiler(connId)   ──► Tauri IPC ──►  │    │
+│  api.getResourceMetrics(connId)     ──► Tauri IPC ──►  │    │
+│  api.getResourceHistory(connId)     ──► Tauri IPC ──►  │    │
+│  api.getDetectedPorts(connId)       ──► Tauri IPC ──►  │    │
+│  api.ignoreDetectedPort(connId, p)  ──► Tauri IPC ──►  │    │
+├──────────────────────────────────────────────────────────┤    │
+│                        Backend (Rust)                    │    │
+│                                                          │    │
+│  ProfilerRegistry (DashMap<String, ResourceProfiler>)    │    │
+│       │                                                  │    │
+│       └─ ResourceProfiler::spawn(connId, controller,     │    │
+│              app, os_type)                                │    │
+│              │                                           │    │
+│              ├─ open_shell_channel()  → 1 persistent shell    │
+│              ├─ sampling_loop()      → 每 10s 一次采样        │
+│              │     ├─ shell_sample() → 写入命令 + 读取输出    │
+│              │     ├─ parse_metrics()→ 解析 /proc 数据        │
+│              │     ├─ emit_metrics() → AppHandle.emit()       │
+│              │     ├─ parse_listening_ports() → 端口解析 ─────┘
+│              │     └─ 端口差异检测 → emit port-detected 事件
+│              │
+│              ├─ ignored_ports: HashSet<u16> (用户忽略)
+│              ├─ detected_ports: Vec<DetectedPort> (最新快照)
+│              └─ stop 信号: oneshot / disconnect_rx / 手动
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 8.3 采集指标
+
+#### 8.3.1 ResourceMetrics 数据结构
+
+```typescript
+type ResourceMetrics = {
+  timestampMs: number;         // 采样时间戳 (ms since epoch)
+  cpuPercent: number | null;   // CPU 使用率 (0-100)，首次无数据
+  memoryUsed: number | null;   // 已用内存 (bytes)
+  memoryTotal: number | null;  // 总内存 (bytes)
+  memoryPercent: number | null;// 内存使用率 (0-100)
+  loadAvg1: number | null;     // 1 分钟负载
+  loadAvg5: number | null;     // 5 分钟负载
+  loadAvg15: number | null;    // 15 分钟负载
+  cpuCores: number | null;     // CPU 核心数
+  netRxBytesPerSec: number | null; // 网络接收速率 (bytes/s)
+  netTxBytesPerSec: number | null; // 网络发送速率 (bytes/s)
+  sshRttMs: number | null;     // SSH RTT (ms)
+  source: MetricsSource;       // 数据质量标识
+}
+
+type MetricsSource = 'full' | 'partial' | 'rtt_only' | 'failed';
+```
+
+#### 8.3.2 数据源对照
+
+| 指标 | 数据源 | 命令 |
+|------|--------|------|
+| CPU% | `/proc/stat` 首行 | `head -1 /proc/stat` |
+| 内存 | `/proc/meminfo` 两行 | `grep -E '^(MemTotal\|MemAvailable):' /proc/meminfo` |
+| 负载 | `/proc/loadavg` | `cat /proc/loadavg` |
+| 网络 | `/proc/net/dev` 全文 | `cat /proc/net/dev`（排除 lo 回环接口） |
+| 核心数 | `nproc` | `nproc` |
+
+> CPU% 和网络速率采用 **Delta 计算**：需要两次采样之间的差值。因此首次采样的这两个指标为 `null`（参见不变量 P5）。
+
+### 8.4 后端设计
+
+#### 8.4.1 持久化 Shell 通道
+
+与常规的 `exec` 模式（每次命令打开新 Channel）不同，Profiler 采用**持久 Shell 通道**：
+
+```
+┌───────────────────────────────────────────────────────────────┐
+│  shell_channel (1 个, 存活全程)                               │
+│                                                               │
+│  1. request_shell(false)                                      │
+│  2. init: export PS1=''; export PS2='';                       │
+│           stty -echo 2>/dev/null; export LANG=C               │
+│  3. 循环:                                                     │
+│     → 写入 build_sample_command(os_type) 动态命令 (stdin)     │
+│     ← 读取输出直到 ===END===                                 │
+│     → 解析指标段 (===STAT=== ~ ===NPROC===)                  │
+│     → 解析端口段 (===PORTS=== ~ ===PORTS_END===)             │
+│     → 解析 Docker 段 (===DOCKER=== ~ ===DOCKER_END===)       │
+│     → 计算 Delta → 发射 profiler:update 事件                 │
+│     → 端口差异 → 发射 port-detected 事件                     │
+│     → sleep 10s                                               │
+└───────────────────────────────────────────────────────────────┘
+```
+
+**优势**：
+- 避免频繁开关 Channel → 不触发 MaxSessions 限制
+- 无额外的 shell 启动开销
+- 输出通过 `===MARKER===` 分隔符精确提取
+
+#### 8.4.2 采样命令
+
+采样命令不再是单一固定字符串，而是通过 `METRICS_COMMAND_LINUX` 常量 + `build_sample_command(os_type)` 函数动态组装。指标采集部分固定，端口扫描命令根据远程主机 `os_type` 平台分发。
+
+**指标采集部分**（`METRICS_COMMAND_LINUX` 常量）：
+
+```bash
+echo '===STAT==='; head -1 /proc/stat 2>/dev/null
+echo '===MEMINFO==='; grep -E '^(MemTotal|MemAvailable):' /proc/meminfo 2>/dev/null
+echo '===LOADAVG==='; cat /proc/loadavg 2>/dev/null
+echo '===NETDEV==='; cat /proc/net/dev 2>/dev/null
+echo '===NPROC==='; nproc 2>/dev/null
+```
+
+**端口扫描部分**（平台分发，详见 8.6 节）拼接在指标命令之后，最终以 `echo '===END==='` 结尾。
+
+**标记分隔符一览**：
+
+| 标记 | 用途 |
+|------|------|
+| `===STAT===` | `/proc/stat` CPU 数据段 |
+| `===MEMINFO===` | `/proc/meminfo` 内存数据段 |
+| `===LOADAVG===` | `/proc/loadavg` 负载数据段 |
+| `===NETDEV===` | `/proc/net/dev` 网络数据段 |
+| `===NPROC===` | CPU 核心数段 |
+| `===PORTS===` / `===PORTS_END===` | 监听端口扫描段 |
+| `===DOCKER===` / `===DOCKER_END===` | Docker 容器端口段 |
+| `===END===` | 整体输出结束标记 |
+
+- 每条子命令均带 `2>/dev/null` → 非 Linux 系统上静默失败
+- 指标采集输出：**~500-1.5KB**（相比读取完整 `/proc` 的 10-30KB，减少约 90%）
+- 加上端口扫描和 Docker 检测后，总输出量通常 **~2-8KB**
+
+#### 8.4.3 性能参数
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `DEFAULT_INTERVAL` | 10s | 采样间隔，平衡精度与 SSH 带宽开销 |
+| `SAMPLE_TIMEOUT` | 5s | 单次采样读取超时 |
+| `MAX_OUTPUT_SIZE` | **64KB** (65,536 bytes) | 输出截断上限，防止异常输出；扩容以容纳端口扫描 + Docker 输出 |
+| `HISTORY_CAPACITY` | 60 | 环形缓冲区大小（10 分钟历史） |
+| `MAX_CONSECUTIVE_FAILURES` | 3 | 连续失败阈值 → 降级为 RttOnly |
+| `CHANNEL_OPEN_TIMEOUT` | 10s | 初始 Shell Channel 打开超时 |
+
+#### 8.4.4 锁策略
+
+使用 `parking_lot::RwLock`（非 `tokio::sync::RwLock`），原因：
+- 临界区极短（仅读写几个字段，无 await）
+- `parking_lot` 提供更高效的自旋/休眠混合策略
+- 避免 async RwLock 的 Waker/调度开销
+- 减少与终端 PTY I/O 的 tokio 调度器竞争
+
+#### 8.4.5 停止机制（三路信号）
+
+```rust
+tokio::select! {
+    _ = interval.tick() => { /* 采样 */ }
+    _ = disconnect_rx.recv() => { break; }  // SSH 断连
+    _ = &mut stop_rx => { break; }          // 手动停止
+}
+```
+
+1. **disconnect_rx** — `HandleController::subscribe_disconnect()` 的广播，SSH 物理断连时触发
+2. **stop_rx** — `tokio::sync::oneshot`，调用 `profiler.stop()` 时发送
+3. **ProfilerRegistry::stop_all()** — 应用退出时统一清理
+
+停止后将 `ProfilerState` 设为 `Stopped`，并关闭持久 Shell Channel。
+
+#### 8.4.6 ProfilerState 枚举
+
+```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProfilerState {
+    Running,   // 正常采样中
+    Stopped,   // 已停止（手动或断连）
+    Degraded,  // 降级模式（仅 RTT）
+}
+```
+
+- `start_resource_profiler` 命令检查当前状态：若为 `Running` 则幂等返回，若为 `Stopped`/`Degraded` 则移除旧实例并重新 spawn
+
+### 8.5 前端设计
+
+#### 8.5.1 profilerStore (Zustand)
+
+```
+src/store/profilerStore.ts
+```
+
+每个连接独立状态：`ConnectionProfilerState { metrics, history, isRunning, isEnabled, error }`
+
+**关键操作**：
+
+| 方法 | 说明 |
+|------|------|
+| `startProfiler(connId)` | 调用后端 API + 订阅 Tauri 事件；递增 `_generations` 令牌防竞态 |
+| `stopProfiler(connId)` | 递增令牌 + 取消订阅 + 调用后端 API + 清理状态 |
+| `_updateMetrics(connId, m)` | `new Map(get().connections)` 浅拷贝后 `.set()` 触发 Zustand 更新 |
+| `removeConnection(connId)` | 递增令牌 + 取消订阅 + 从 `connections` Map 中删除 + 清理 `_generations` 条目 |
+| `getSparklineHistory(connId)` | 返回最近 12 个数据点用于迷你图 |
+| `isEnabled(connId)` | 查询特定连接的监控启用状态 |
+
+**竞态防护 — `_generations` Map**：
+
+`profilerStore` 使用 `_generations: Map<string, number>` 为每个连接维护一个递增的"世代令牌"。当 `startProfiler` 或 `stopProfiler` 被调用时，令牌递增。异步回调在完成时检查当前令牌是否与启动时一致——若不一致，说明存在更新的操作（例如 React StrictMode 双重挂载导致的二次 start），此时丢弃本次回调结果，避免竞态覆盖新状态。
+
+**渲染优化**：
+
+`_updateMetrics` 采用 `new Map(get().connections)` 创建浅拷贝后对新 Map 执行 `.set()` — 仅触发订阅了对应 connectionId 数据的组件。避免全量 Map 深拷贝导致的无关连接组件重渲染。
+
+#### 8.5.2 API 层
+
+```typescript
+// src/lib/api.ts — 6 个 API 包装函数
+api.startResourceProfiler(connectionId: string): Promise<void>
+api.stopResourceProfiler(connectionId: string): Promise<void>
+api.getResourceMetrics(connectionId: string): Promise<ResourceMetrics | null>
+api.getResourceHistory(connectionId: string): Promise<ResourceMetrics[]>
+api.getDetectedPorts(connectionId: string): Promise<DetectedPort[]>
+api.ignoreDetectedPort(connectionId: string, port: number): Promise<void>
+```
+
+#### 8.5.3 事件通道
+
+**指标更新事件**：
+```
+事件名: "profiler:update:{connectionId}"
+载荷: ResourceMetrics (JSON)
+方向: Backend → Frontend (单向)
+频率: 每 10 秒
+```
+
+**端口检测事件**：
+```
+事件名: "port-detected:{connectionId}"
+载荷: PortDetectionEvent (JSON)
+方向: Backend → Frontend (单向)
+频率: 端口变更时（非首次扫描）
+```
+
+### 8.6 智能端口检测（Smart Port Detection）
+
+智能端口检测是 Profiler 的重要扩展功能模块。每次采样周期内，除了收集系统指标外，还会扫描远程主机的监听端口并检测变更，驱动前端提供"是否转发此端口？"的通知体验。
+
+#### 8.6.1 数据结构
+
+```rust
+/// 远程主机上检测到的监听端口
+pub struct DetectedPort {
+    pub port: u16,                    // 端口号
+    pub bind_addr: String,            // 绑定地址 (如 "0.0.0.0", "127.0.0.1", "::")
+    pub process_name: Option<String>, // 进程名 (如 "node", "python3", "docker:my-app")
+    pub pid: Option<u32>,             // 进程 ID
+}
+
+/// 端口变更事件
+pub struct PortDetectionEvent {
+    pub connection_id: String,        // 所属连接
+    pub new_ports: Vec<DetectedPort>, // 新增端口（上次扫描中不存在）
+    pub closed_ports: Vec<DetectedPort>, // 已关闭端口（上次存在本次不存在）
+    pub all_ports: Vec<DetectedPort>,    // 当前全部监听端口
+}
+```
+
+#### 8.6.2 平台分发的端口扫描命令
+
+`build_sample_command(os_type)` 根据远程主机的 `os_type` 拼接平台特定的端口扫描命令：
+
+| 平台 | 命令 | 常量 |
+|------|------|------|
+| **Linux** / MinGW / MSYS / Cygwin | `ss -tlnp` (fallback `netstat -tlnp`) | `PORT_CMD_LINUX` |
+| **macOS** / Darwin | `lsof -iTCP -sTCP:LISTEN -nP` | `PORT_CMD_MACOS` |
+| **Windows** (原生) | `PowerShell Get-NetTCPConnection -State Listen` | `PORT_CMD_WINDOWS` |
+| **FreeBSD** / OpenBSD / NetBSD | `sockstat -4 -6 -l -P tcp` | `PORT_CMD_FREEBSD` |
+| 其他 | 回退至 Linux 命令 | `PORT_CMD_LINUX` |
+
+所有平台的端口输出均包裹在 `===PORTS===` ... `===PORTS_END===` 标记对中。
+
+#### 8.6.3 Docker 容器端口检测
+
+除常规端口扫描外，还会执行 `docker ps --format '{{.ID}}\t{{.Names}}\t{{.Ports}}'` 检测容器映射端口（通过 iptables DNAT 的端口可能在 `ss` 中不可见）。输出包裹在 `===DOCKER===` ... `===DOCKER_END===` 标记对中。
+
+- Docker 端口的 `process_name` 字段格式为 `"docker:{container_name}"`
+- 支持 `sudo -n docker ps` 回退（无密码 sudo）
+- 仅解析带 `->` 的主机映射端口，跳过仅暴露（`EXPOSE`）但未映射的端口
+- 多映射端口（如 `0.0.0.0:3000->3000/tcp, 0.0.0.0:3001->3001/tcp`）逐一解析
+- Docker 端口与 `ss`/`netstat` 结果按端口号去重（`ss` 结果优先）
+
+#### 8.6.4 端口差异与变更事件
+
+采样循环在每个周期执行以下逻辑：
+
+1. 解析 `===PORTS===` 段和 `===DOCKER===` 段，合并为 `current_ports`
+2. 与 `prev_ports`（上次扫描的端口号集合）求差集：
+   - `new_port_numbers = current - prev`
+   - `closed_port_numbers = prev - current`
+3. 过滤新端口：排除端口 22（SSH）和用户已忽略端口（`ignored_ports`）
+4. 若存在可见的新增或关闭端口，发射 `port-detected:{connectionId}` 事件
+5. 更新 `prev_ports` 和 `detected_ports` 快照
+
+**截断保护**：若采样输出被 `MAX_OUTPUT_SIZE` 截断（不含 `===END===` 标记），则跳过该周期的端口差异计算，避免部分输出导致的误报。
+
+#### 8.6.5 用户忽略端口机制
+
+- `ResourceProfiler` 持有 `ignored_ports: Arc<RwLock<HashSet<u16>>>` 忽略集合
+- 用户在前端点击"忽略"时，调用 `api.ignoreDetectedPort(connectionId, port)`
+- 后端 `ignore_port()` 将端口号加入 `ignored_ports`，后续差异计算时过滤
+- 忽略状态持续到 Profiler 重启（即下次连接时重置）
+- 前端 `usePortDetection` hook 通过 `dismissedRef` 维护本地已忽略列表
+
+#### 8.6.6 前端 usePortDetection Hook
+
+```typescript
+// src/hooks/usePortDetection.ts
+export function usePortDetection(connectionId: string | undefined): {
+  newPorts: DetectedPort[];     // 新检测到的、未被用户忽略的端口
+  allPorts: DetectedPort[];     // 当前全部监听端口
+  dismissPort: (port: number) => void; // 忽略端口
+  isActive: boolean;            // 是否正在接收端口数据
+}
+```
+
+- 订阅 `port-detected:{connectionId}` 事件接收实时差异
+- 每 12 秒轮询 `api.getDetectedPorts()` 刷新全量快照（覆盖首次静默扫描）
+- 自动确保 Profiler 已启动（幂等调用 `api.startResourceProfiler`）
+- `connectionId` 变更时清除本地忽略状态
+- 在 `ForwardsView` 组件中使用，提供"检测到新端口，是否创建转发？"的 UI
+
+#### 8.6.7 Tauri 命令
+
+| 命令 | 参数 | 返回 | 说明 |
+|------|------|------|------|
+| `get_detected_ports` | `connection_id: String` | `Vec<DetectedPort>` | 获取最新端口快照 |
+| `ignore_detected_port` | `connection_id: String, port: u16` | `()` | 将端口加入忽略列表 |
+
+### 8.7 不变量
+
+| 编号 | 不变量 | 说明 |
+|------|--------|------|
+| **P1** | 无强引用 | Profiler 不持有连接的强引用，仅通过 `HandleController`（弱引用）操作 |
+| **P2** | 断连自停 | SSH 断连 → `disconnect_rx` 触发 → Profiler 自动停止并释放 Channel |
+| **P3** | 单通道 | 整个生命周期仅打开 1 个 Shell Channel，不会导致 MaxSessions 耗尽 |
+| **P5** | 首采空值 | 首次采样的 CPU% 和网络速率为 `None`（无 Delta 基线） |
+| **P6** | 首次端口扫描静默 | 首次端口扫描仅建立基线（`is_initial_scan = true`），不发射 `port-detected` 事件，避免连接建立时的大量噪音通知 |
+
+### 8.8 测试
+
+后端包含丰富的单元测试，覆盖指标解析和端口检测两大模块：
+
+```bash
+cd src-tauri && cargo test profiler    # 运行 profiler 相关测试
+```
+
+**指标解析测试**：
+
+| 测试 | 验证内容 |
+|------|---------|
+| `test_parse_cpu_snapshot` | `/proc/stat` 解析正确性 |
+| `test_parse_meminfo` | MemTotal / MemAvailable 计算 |
+| `test_parse_loadavg` | 负载平均值解析 |
+| `test_parse_net_snapshot` | 网络接口聚合（排除 lo） |
+| `test_parse_nproc` | CPU 核心数解析 |
+| `test_parse_metrics_first_sample_no_delta` | P5：首次无 CPU%/网络速率 |
+| `test_parse_metrics_with_delta` | Delta 计算正确性 |
+| `test_extract_section` | 标记分隔符提取 |
+| `test_empty_output` | 空输出 → RttOnly 降级 |
+
+**端口检测测试**：
+
+| 测试 | 验证内容 |
+|------|---------|
+| `test_parse_ports_ss` | `ss -tlnp` 输出解析（含进程名/PID 提取） |
+| `test_parse_ports_netstat` | `netstat -tlnp` 输出解析 |
+| `test_parse_ports_lsof` | macOS `lsof` 输出解析 |
+| `test_parse_ports_powershell` | Windows `Get-NetTCPConnection` 输出解析 |
+| `test_parse_ports_sockstat` | FreeBSD `sockstat` 输出解析 |
+| `test_parse_addr_port_ipv4` | IPv4 地址:端口 解析 |
+| `test_parse_addr_port_ipv6_brackets` | IPv6 带括号格式 `[::]:3000` |
+| `test_parse_addr_port_wildcard` | 通配符 `*:22` → `0.0.0.0:22` |
+| `test_parse_addr_port_ipv6_no_brackets` | IPv6 无括号格式 `:::80` |
+| `test_dedup_ports` | IPv4/IPv6 同端口去重 |
+| `test_parse_ports_docker` | Docker `docker ps` 映射端口解析 |
+| `test_parse_ports_docker_multi_mapping` | Docker 多端口映射 |
+| `test_parse_ports_docker_empty` | 空 Docker 输出 |
+| `test_parse_ports_docker_no_section` | 无 Docker 段时不报错 |
+| `test_parse_listening_ports_full_output` | 完整采样输出同时解析指标和端口 |
+| `test_parse_listening_ports_with_docker_merge` | ss + Docker 合并 |
+| `test_parse_listening_ports_docker_dedup_with_ss` | ss 与 Docker 重复端口去重（ss 优先） |
+
+### 8.9 文件清单
+
+| 文件 | 职责 |
+|------|------|
+| `src-tauri/src/session/profiler.rs` | 核心采样引擎 + 端口检测（**~1570 行**） |
+| `src-tauri/src/session/health.rs` | `ResourceMetrics` / `MetricsSource` 类型定义 |
+| `src-tauri/src/commands/health.rs` | `ProfilerRegistry` + **6 个** Tauri 命令 |
+| `src-tauri/src/lib.rs` | `.manage(ProfilerRegistry)` + 命令注册 + 退出清理 |
+| `src/store/profilerStore.ts` | 前端 Zustand Store（含 `_generations` 竞态防护） |
+| `src/hooks/usePortDetection.ts` | 智能端口检测 React Hook |
+| `src/lib/api.ts` | **6 个** API 包装函数 |
+| `src/types/index.ts` | TypeScript 类型定义（`DetectedPort` / `PortDetectionEvent`） |
+| `src/locales/*/profiler.json` | 11 种语言的 i18n 文件 |
+
+### 8.10 性能影响
+
+#### SSH 带宽
+
+- 每次采样命令（指标 + 端口扫描 + Docker）+ 输出：**~2-8 KB**
+- 10s 间隔 → **~12-48 KB/min** 额外带宽
+- 远低于终端 PTY 的典型吞吐量（滚屏时可达 MB/s 级）
+- 端口较多的服务器（100+ 监听端口）输出可能增至 ~15-20KB/次，仍远低于 `MAX_OUTPUT_SIZE`（64KB）
+
+#### 系统资源
+
+- **1 个 Shell Channel** — 不占用额外的 SSH Session 额度
+- **`parking_lot::RwLock`** — 极低锁开销，自旋+休眠混合策略，不与 tokio 调度器竞争
+- **环形缓冲区**（60 条）— 内存占用恒定（~30 KB/连接，不含端口快照）
+- **端口快照**：`detected_ports` + `ignored_ports` + `prev_ports` 额外占用极少（通常 < 1KB/连接）
+
+#### 端口检测开销
+
+- 端口解析在采样主线程内同步完成，耗时通常 < 1ms
+- `HashSet` 差集计算为 O(n) 复杂度，即使 100+ 端口也在微秒级别
+- 端口变更事件通过 `app_handle.emit()` 异步发送，不阻塞采样循环
+
+#### 降级策略
+
+连续 3 次采样失败后自动降级：
+- **RttOnly 模式**：停止 `/proc` 采样和端口扫描，仅保留 SSH RTT 数据
+- 降级后仍会每 10s 发射一次空指标（前端可据此显示降级状态）
+- Channel 关闭时会尝试一次重开（`open_shell_channel`）
+
+### 8.11 集成示例
+
+#### 资源指标
+
+```typescript
+import { useProfilerStore } from '../store/profilerStore';
+
+// 启动监控
+await useProfilerStore.getState().startProfiler(connectionId);
+
+// 读取最新指标
+const metrics = useProfilerStore.getState().connections.get(connectionId)?.metrics;
+if (metrics?.cpuPercent !== null) {
+  console.log(`CPU: ${metrics.cpuPercent.toFixed(1)}%`);
+}
+
+// 停止监控
+await useProfilerStore.getState().stopProfiler(connectionId);
+```
+
+> **幂等性**：`startProfiler` 和 `stopProfiler` 均为幂等操作，重复调用不会产生副作用。React StrictMode 的双重挂载通过 `_generations` 令牌机制安全处理，不会产生重复 Profiler。
+
+#### 智能端口检测
+
+```typescript
+import { usePortDetection } from '../hooks/usePortDetection';
+
+function ForwardingPanel({ connectionId }: { connectionId: string }) {
+  const { newPorts, allPorts, dismissPort, isActive } = usePortDetection(connectionId);
+
+  return (
+    <>
+      {newPorts.map((p) => (
+        <PortNotification
+          key={p.port}
+          port={p.port}
+          processName={p.process_name}
+          onForward={() => createForward(connectionId, p.port)}
+          onDismiss={() => dismissPort(p.port)}
+        />
+      ))}
+    </>
+  );
+}
+```
+
+---
+
+## 9. 远程环境探测器（Environment Detector）
+
+> 合并来源: `ENV_DETECTOR.md`
+> 代码验证: 2026-03-24
+
+**目标**：SSH 连接建立后自动探测远程主机的 OS / 架构 / Shell 类型，注入 AI 上下文，让 Inline Panel 和 Sidebar Chat 给出正确的平台命令。
+
+### 9.1 问题
+
+| 面板 | 当前做法 | 缺陷 |
+|------|---------|------|
+| Inline Panel | `navigator.platform` → 本地 OS | SSH 到 CentOS 时 prompt 说 `Current OS: macOS` |
+| Sidebar Chat | `guessRemoteOS()` 靠 hostname 模式匹配 | `192.168.1.100` 返回 `null`，多数服务器无法识别 |
+
+### 9.2 架构概览
+
+```
+SSH 连接 Active
+     │
+     ▼  (tokio::spawn, ~1s)
+┌────────────────────┐
+│  env_detector.rs   │  ← 新模块，仿照 profiler.rs
+│  open_shell()      │
+│  Phase A: 判平台   │  if [ -n "$PSModulePath" ]; ...
+│  Phase B: 分支探测 │  Linux: uname + /etc/os-release
+│                    │  Windows: PSVersionTable + ver
+│  close_shell()     │
+└────────┬───────────┘
+         │ RemoteEnvInfo
+         ▼
+  ConnectionEntry.remote_env  ← OnceLock 缓存（一次写入，不可变读取）
+         │
+         ├──→ Tauri Event "env:detected"
+         │         ↓
+         │    appStore.connections[id].remoteEnv
+         │
+         ├──→ sidebarContextProvider.ts
+         │    formatSystemPromptSegment()
+         │    "Remote OS: Linux (Ubuntu 22.04)"
+         │
+         └──→ AiInlinePanel.tsx
+              "Remote: Linux x86_64 /bin/bash"
+```
+
+### 9.3 数据结构
+
+#### Rust（`session/env_detector.rs` — 580 行）
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteEnvInfo {
+    /// "Linux" | "macOS" | "Windows" | "FreeBSD" | "OpenBSD" | "NetBSD" | "SunOS" | "Unknown"
+    /// 特殊值: "Windows_MinGW" (Git Bash), "Windows_MSYS", "Windows_Cygwin"
+    pub os_type: String,
+
+    /// PRETTY_NAME from /etc/os-release, ver output, sw_vers, etc.
+    pub os_version: Option<String>,
+
+    /// uname -r
+    pub kernel: Option<String>,
+
+    /// uname -m or PROCESSOR_ARCHITECTURE
+    pub arch: Option<String>,
+
+    /// $SHELL or PowerShell version
+    pub shell: Option<String>,
+
+    /// chrono::Utc::now().timestamp()
+    pub detected_at: i64,
+}
+
+impl RemoteEnvInfo {
+    /// 便捷构造函数：创建 "Unknown" 结果，用于探测失败场景。
+    pub fn unknown() -> Self {
+        Self {
+            os_type: "Unknown".to_string(),
+            os_version: None,
+            kernel: None,
+            arch: None,
+            shell: None,
+            detected_at: Utc::now().timestamp(),
+        }
+    }
+}
+```
+
+**关键常量**：
+
+```rust
+const CHANNEL_OPEN_TIMEOUT: Duration = Duration::from_secs(5);
+const PHASE_A_TIMEOUT: Duration      = Duration::from_secs(3);
+const PHASE_B_TIMEOUT: Duration      = Duration::from_secs(5);
+const TOTAL_TIMEOUT: Duration        = Duration::from_secs(8);
+const MAX_OUTPUT_SIZE: usize         = 8192; // 8KB 最大输出限制
+```
+
+#### `ConnectionEntry` 中的缓存字段
+
+```rust
+remote_env: std::sync::OnceLock<RemoteEnvInfo>,
+```
+
+> **语义说明**：使用 `OnceLock` 而非 `RwLock<Option<…>>`——探测结果只写入一次、此后不可变读取，由类型系统保证线程安全且无需每次读取加锁。
+
+#### TypeScript（`types/index.ts`）
+
+```typescript
+export interface RemoteEnvInfo {
+  osType: string;
+  osVersion?: string;
+  kernel?: string;
+  arch?: string;
+  shell?: string;
+  detectedAt: number;
+}
+
+// 扩展已有类型
+export interface SshConnectionInfo {
+  // ...existing fields...
+  remoteEnv?: RemoteEnvInfo;
+}
+```
+
+### 9.4 探测命令设计
+
+#### Phase A: 平台判别（原子化，单行安全）
+
+```bash
+echo '===DETECT==='; if [ -n "$PSModulePath" ]; then echo 'PLATFORM=windows'; else echo "PLATFORM=$(uname -s 2>/dev/null || echo unknown)"; fi; echo '===END==='
+```
+
+**为什么用 `$PSModulePath`**：所有 Windows 环境（PowerShell、cmd+pwsh、OpenSSH Server）都设置此变量，而 Unix 系统不会设置。比 `$PSVersionTable` 更可靠（后者在 cmd 中不可用）。
+
+#### Phase B-Unix
+
+```bash
+echo '===ENV==='; uname -s 2>/dev/null; echo '===ARCH==='; uname -m 2>/dev/null; \
+echo '===KERNEL==='; uname -r 2>/dev/null; echo '===SHELL==='; echo $SHELL 2>/dev/null; \
+echo '===DISTRO==='; cat /etc/os-release 2>/dev/null | grep -E '^(PRETTY_NAME|ID)=' | head -2; \
+echo '===END==='
+```
+
+#### Phase B-Windows（PowerShell）
+
+```powershell
+echo '===ENV==='; [System.Environment]::OSVersion.VersionString; echo '===ARCH==='; \
+$env:PROCESSOR_ARCHITECTURE; echo '===SHELL==='; "PowerShell $($PSVersionTable.PSVersion)"; \
+echo '===END==='
+```
+
+#### "伪装" Windows 识别规则
+
+`uname -s` 返回值中包含以下模式时，识别为 Windows 变体环境：
+
+| `uname -s` 输出 | 映射 |
+|----------------|------|
+| `MINGW64_NT-*` / `MINGW32_NT-*` | `Windows_MinGW`（Git Bash） |
+| `MSYS_NT-*` | `Windows_MSYS` |
+| `CYGWIN_NT-*` | `Windows_Cygwin` |
+
+AI Prompt 注入示例：`"Remote environment: Windows (MinGW/Git Bash) — paths use /c/Users format"`
+
+#### OS 分类完整映射
+
+`classify_unix_os()` 函数支持以下 `uname -s` 到 `os_type` 的映射：
+
+| `uname -s` | `os_type` |
+|-------------|-----------|
+| `Linux` | `Linux` |
+| `Darwin` | `macOS` |
+| `FreeBSD` | `FreeBSD` |
+| `OpenBSD` | `OpenBSD` |
+| `NetBSD` | `NetBSD` |
+| `SunOS` | `SunOS` |
+| `MINGW64_NT-*` / `MINGW32_NT-*` | `Windows_MinGW` |
+| `MSYS_NT-*` | `Windows_MSYS` |
+| `CYGWIN_NT-*` | `Windows_Cygwin` |
+| 空字符串 / `"unknown"` | `Unknown` |
+| 其他非空值 | 原样保留 |
+
+### 9.5 触发时机
+
+在 `SshConnectionRegistry` 中，`ConnectionEntry` 创建并插入 `connections` DashMap 后，共有 **3 处**触发点：
+
+| 触发点 | 方法 | 说明 |
+|--------|------|------|
+| 直连 | `connect()` | 常规 SSH 直连成功后 |
+| 隧道连接 | `establish_tunneled_connection()` | 通过跳板机建立的隧道连接 |
+| 注册已有连接 | `register_existing()` | 将外部已建立的 SSH 连接注册到连接池 |
+
+#### `spawn_env_detection` 签名
+
+主方法：
+
+```rust
+pub fn spawn_env_detection(self: &Arc<Self>, connection_id: &str)
+```
+
+- 从 `self.connections` 中获取 `ConnectionEntry`
+- Clone `handle_controller`
+- `tokio::spawn` 异步执行 `detect_remote_env()`
+- 结果通过 `OnceLock::set()` 写入 `entry.remote_env`
+- Emit `env:detected` 事件
+
+对于 `register_existing()`（不持有 `Arc<Self>`），使用内部静态版本：
+
+```rust
+fn spawn_env_detection_inner(
+    conn: Arc<ConnectionEntry>,
+    connection_id: String,
+    app_handle: Option<AppHandle>,
+)
+```
+
+### 9.6 超时与失败
+
+| 阶段 | 超时 | 失败处理 |
+|------|------|---------|
+| Channel 打开 | 5s | `os_type = "Unknown"`，warn 日志 |
+| Phase A 输出等待 | 3s | 同上 |
+| Phase B 输出等待 | 5s | 只填 `os_type`，其余 `None` |
+| 总探测 | 8s | 强制终止，标记 Unknown |
+| 单次输出上限 | 8KB (`MAX_OUTPUT_SIZE`) | 截断输出，防止异常服务器撑爆内存 |
+
+失败时仍然 emit 事件，payload `os_type = "Unknown"`，前端 AI prompt 注入：
+
+```
+- Remote OS: Unknown (detection failed, provide platform-agnostic commands when possible)
+```
+
+### 9.7 异步竞态处理
+
+用户可能在探测完成前就打开 AI 面板。
+
+#### 前端策略
+
+`SshConnectionInfo.remoteEnv` 有三种状态：
+- `undefined` — 探测尚未开始/进行中
+- `null` — 无 SSH 连接（本地终端）
+- `RemoteEnvInfo` — 探测完成
+
+**AiInlinePanel** 和 **sidebarContextProvider** 注入逻辑：
+
+```typescript
+if (remoteEnv === undefined) {
+  prompt += '- Remote OS: [detecting...] (provide platform-agnostic commands)\n';
+} else if (remoteEnv === null) {
+  prompt += `- Terminal: Local (${localOS})\n`;
+} else {
+  prompt += `- Remote OS: ${remoteEnv.osType}\n`;
+}
+```
+
+#### Rust 侧
+
+`ConnectionEntry.remote_env` 类型为 `std::sync::OnceLock<RemoteEnvInfo>`：
+- 初始状态为空（未设置 — 探测进行中）
+- 探测完成后通过 `OnceLock::set()` 写入一次
+- 后续所有读取通过 `OnceLock::get()` 获取不可变引用，无锁开销
+- `to_info()` 序列化时包含此字段
+
+### 9.8 前端改动清单
+
+#### `src/lib/sidebarContextProvider.ts`
+
+1. `EnvironmentSnapshot` 增加 `remoteEnv?: RemoteEnvInfo`（替代 `remoteOSHint: string | null`）
+2. `gatherSidebarContext()` 从 `appStore.connections[id]` 读取 `remoteEnv`
+3. `formatSystemPromptSegment()` 输出详细环境信息
+4. 保留 `guessRemoteOS()` 作为 `remoteEnv === undefined` 时的 fallback
+5. 探测中标注 `[detecting...]`
+
+#### `AiInlinePanel.tsx`
+
+1. 新增 props: `sessionId?: string`
+2. 通过 `sessionId` → `appStore` → `remoteEnv` 获取环境
+3. System prompt 根据状态切换：
+   - SSH + 已探测: `"Remote environment: Linux (Ubuntu 22.04), arch: x86_64, shell: /bin/bash"`
+   - SSH + 探测中: `"Remote environment: detecting..."`
+   - SSH + 失败: `"Remote environment: unknown"`
+   - 本地终端: `"Local OS: macOS"`
+
+#### 其他文件
+
+- `TerminalView.tsx` / `LocalTerminalView.tsx` — 传入 `sessionId` prop 给 `AiInlinePanel`
+- `useConnectionEvents.ts` — 新增监听 `env:detected` 事件
+- `api.ts` — 新增 `getRemoteEnv(connectionId): Promise<RemoteEnvInfo | null>`
+- `types/index.ts` — 新增 `RemoteEnvInfo` 接口，扩展 `SshConnectionInfo`
+
+### 9.9 文件清单
+
+| 文件 | 说明 |
+|------|------|
+| `src-tauri/src/session/env_detector.rs` | 核心探测逻辑（580 行，含 8 个单元测试） |
+| `src-tauri/src/session/mod.rs` | `pub mod env_detector;` |
+| `src-tauri/src/ssh/connection_registry.rs` | `OnceLock<RemoteEnvInfo>` 字段 + `spawn_env_detection()` |
+| `src-tauri/src/commands/ssh.rs` | `get_remote_env` 命令 |
+| `src-tauri/src/lib.rs` | 注册新命令 |
+| `src/types/index.ts` | `RemoteEnvInfo` 接口 + `SshConnectionInfo` 扩展 |
+| `src/lib/api.ts` | `getRemoteEnv()` wrapper |
+| `src/lib/sidebarContextProvider.ts` | 替换 `guessRemoteOS()`，增强 AI prompt |
+| `src/components/terminal/AiInlinePanel.tsx` | `sessionId` prop，OS 感知 |
+| `src/components/terminal/TerminalView.tsx` | 传 `sessionId` |
+| `src/components/terminal/LocalTerminalView.tsx` | 传标记 |
+| `src/hooks/useConnectionEvents.ts` | 监听 `env:detected` |
+
+### 9.10 测试
+
+#### 集成测试场景
+
+| 场景 | 预期 |
+|------|------|
+| SSH → Ubuntu 22.04 | `Linux / Ubuntu 22.04.3 LTS / x86_64 / /bin/bash` |
+| SSH → macOS | `macOS / Darwin / arm64 / /bin/zsh` |
+| SSH → Windows (OpenSSH + PowerShell) | `Windows / Microsoft Windows NT 10.0 / AMD64 / PowerShell 7.x` |
+| SSH → Windows (Git Bash) | `Windows_MinGW / MINGW64_NT... / x86_64 / /usr/bin/bash` |
+| SSH → FreeBSD | `FreeBSD / uname 输出 / amd64 / /bin/sh` |
+| SSH → 路由器 (受限 shell) | `Unknown` + warn 日志 |
+| SSH → 隧道连接 | 隧道目标的环境，非跳板机 |
+| 本地终端 | 不触发探测，使用 `navigator.platform` |
+| 连接后 0.1s 打开 AI | `[detecting...]` → 稍后自动更新 |
+| 探测超时 | `Unknown` + 标注 |
+
+#### 单元测试（`env_detector.rs` — 8 个 `#[test]`）
+
+| 测试函数 | 覆盖范围 |
+|---------|---------|
+| `test_classify_unix_os` | OS 分类映射（Linux、Darwin→macOS、FreeBSD、MinGW、MSYS、Cygwin、SunOS、空值） |
+| `test_parse_unix_env` | 标准 Linux 输出解析（Ubuntu 22.04） |
+| `test_parse_unix_env_macos` | macOS（Darwin）输出解析 |
+| `test_parse_unix_env_mingw` | MinGW/Git Bash 环境输出解析 |
+| `test_parse_windows_env` | Windows PowerShell 输出解析 |
+| `test_extract_os_release_field` | `/etc/os-release` 字段提取 |
+| `test_extract_section` | 分隔符标记之间的文本提取 |
+| `test_unknown` | `RemoteEnvInfo::unknown()` 便捷构造函数 |
+
+### 9.11 安全考量
+
+- 探测命令均为**只读操作**（`uname`, `cat`, `echo`），无副作用
+- **不写入任何文件**到远程主机
+- Shell channel 探测完即关闭，**不持久占用** `MaxSessions` 配额
+- 探测结果**不包含敏感信息**（无密码、无密钥）
+- 结果仅缓存在内存中（`OnceLock`），**不持久化到磁盘**
+- 输出截断保护：`MAX_OUTPUT_SIZE = 8192`（8KB），防止恶意/异常远程主机撑爆内存
+
+### 9.12 设计不变量
+
+| 编号 | 不变量 | 说明 |
+|------|--------|------|
+| **E1** | 探测通道即用即关 | 不占用远程 `MaxSessions` 配额 |
+| **E2** | 每连接只探测一次 | 结果通过 `OnceLock` 缓存，类型系统保证单次写入 |
+| **E3** | 断连期间优雅中止 | SSH 断开时探测任务不会 panic，返回 `Unknown` |
+
+---
+
 ## 附录
 
 ### A. 跨章引用索引
@@ -2292,9 +3160,9 @@ sequenceDiagram
 | **agentService / agentStore** | 6 | Remote Agent 状态管理与门面层 |
 | **原子写入** | 5, 6 | SFTP `nodeSftpWrite` 和 Agent `fs/writeFile` 均支持原子写入（tmpfile → rename） |
 | **Agent → SFTP 降级** | 5, 6 | agentService 中文件操作自动降级到 SFTP；SFTP 是基础能力层 |
-| **SSH 连接** | 1, 2, 3, 4, 5, 6, 7 | 全系统基础设施；第 1 章连接池管理，第 2 章多跳路由，第 7 章 Agent 认证 |
-| **Tauri IPC** | 1, 3, 4, 5, 6 | 前端通过 `invoke()` 调用后端命令；第 1 章 `ssh_list_connections()`，第 3 章 `probeSingleConnection` |
-| **Tauri Event** | 1, 3, 4, 5 | 连接状态变更事件驱动全系统响应；第 1 章 `connection_status_changed`，第 3 章触发 `scheduleReconnect` |
+| **SSH 连接** | 1, 2, 3, 4, 5, 6, 7, 8, 9 | 全系统基础设施；第 8 章 Profiler 通过 SSH Shell Channel 采样，第 9 章 Detector 通过 SSH Shell Channel 探测 |
+| **Tauri IPC** | 1, 3, 4, 5, 6, 8, 9 | 前端通过 `invoke()` 调用后端命令；第 8 章 6 个 Profiler 命令，第 9 章 `get_remote_env` |
+| **Tauri Event** | 1, 3, 4, 5, 8, 9 | 连接状态变更事件驱动全系统响应；第 8 章 `profiler:update` / `port-detected`，第 9 章 `env:detected` |
 | **ForwardStatus::Suspended** | 3, 4 | 端口转发在断线时进入 Suspended，重连编排器在 restore-forwards 阶段恢复 |
 | **`useNodeState` hook** | 4, 5 | 前端组件通过此 hook 感知连接就绪状态 |
 | **JSON-RPC 协议** | 6 | Agent 通信协议，行分隔 JSON-RPC via SSH exec stdin/stdout |
@@ -2309,6 +3177,15 @@ sequenceDiagram
 | **ConnectionPoolConfig** | 1 | 连接池配置结构体：idleTimeoutSecs、maxConnections、protectOnExit |
 | **proxy_chain** | 2 | 多跳 SSH 跳板机链路配置，存储于 SessionTreeStore 的连接定义中 |
 | **ReconnectSnapshot** | 3 | 重连快照结构，捕获断线时的完整会话状态用于恢复 |
+| **持久化 Shell Channel** | 8 | Profiler 采用单个持久 Shell Channel 采样，避免 MaxSessions 耗尽 |
+| **profilerStore** | 8 | 资源监控器前端 Zustand Store，含 `_generations` 竞态防护 |
+| **智能端口检测** | 4, 8 | 第 8 章检测远程监听端口，第 4 章端口转发可一键创建转发规则 |
+| **HandleController（弱引用）** | 8, 9 | Profiler 和 Detector 均通过 `HandleController` 弱引用操作 SSH 连接 |
+| **RemoteEnvInfo** | 8, 9 | 第 9 章探测结果用于第 8 章 `build_sample_command(os_type)` 平台分发 |
+| **OnceLock** | 9 | `ConnectionEntry.remote_env` 使用 `OnceLock` 实现单次写入、不可变读取 |
+| **AI 上下文注入** | 9 | Detector 结果注入 Sidebar Chat 和 Inline Panel 的 system prompt |
+| **parking_lot::RwLock** | 8 | Profiler 使用 parking_lot 替代 std/tokio RwLock，减少调度器竞争 |
+| **Delta 计算** | 8 | CPU% 和网络速率基于两次采样差值，首次采样返回 None |
 
 ### B. API 快速参考汇总表
 
@@ -2392,3 +3269,20 @@ sequenceDiagram
 | `symbolIndex(nodeId, path, maxFiles?)` | Agent only |
 | `symbolComplete(nodeId, path, prefix, limit?)` | Agent only |
 | `symbolDefinitions(nodeId, path, name)` | Agent only |
+
+#### B.5 资源监控器 API
+
+| 前端函数 | 后端命令 | 参数 |
+|---------|---------|------|
+| `api.startResourceProfiler(connId)` | `start_resource_profiler` | `connectionId` |
+| `api.stopResourceProfiler(connId)` | `stop_resource_profiler` | `connectionId` |
+| `api.getResourceMetrics(connId)` | `get_resource_metrics` | `connectionId` |
+| `api.getResourceHistory(connId)` | `get_resource_history` | `connectionId` |
+| `api.getDetectedPorts(connId)` | `get_detected_ports` | `connectionId` |
+| `api.ignoreDetectedPort(connId, port)` | `ignore_detected_port` | `connectionId, port` |
+
+#### B.6 环境探测器 API
+
+| 前端函数 | 后端命令 | 参数 |
+|---------|---------|------|
+| `api.getRemoteEnv(connId)` | `get_remote_env` | `connectionId` |
