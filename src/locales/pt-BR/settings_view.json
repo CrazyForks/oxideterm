@@ -473,7 +473,15 @@
       "ready_to_restart": "Atualização instalada — reinicie para aplicar",
       "restart_now": "Reiniciar agora",
       "update_error": "Falha ao verificar atualizações",
-      "retry": "Tentar novamente"
+      "retry": "Tentar novamente",
+      "release_notes": "Notas da versão",
+      "no_changelog": "Nenhuma nota de versão disponível",
+      "skip_version": "Pular esta versão",
+      "cancel": "Cancelar",
+      "verifying": "Verificando...",
+      "installing": "Instalando...",
+      "skipped_version": "Ignorada: v{{version}}",
+      "clear_skip": "Limpar"
     },
     "errors": {
       "create_group_failed": "Falha ao criar grupo: {{error}}",

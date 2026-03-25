@@ -473,7 +473,15 @@
       "ready_to_restart": "Update installed — restart to apply",
       "restart_now": "Restart Now",
       "update_error": "Update check failed",
-      "retry": "Retry"
+      "retry": "Retry",
+      "release_notes": "Release Notes",
+      "no_changelog": "No release notes available",
+      "skip_version": "Skip this version",
+      "cancel": "Cancel",
+      "verifying": "Verifying...",
+      "installing": "Installing...",
+      "skipped_version": "Skipped: v{{version}}",
+      "clear_skip": "Clear"
     },
     "errors": {
       "create_group_failed": "Failed to create group: {{error}}",

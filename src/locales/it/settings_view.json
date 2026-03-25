@@ -473,7 +473,15 @@
       "ready_to_restart": "Aggiornamento installato — riavvia per applicare",
       "restart_now": "Riavvia ora",
       "update_error": "Controllo aggiornamenti fallito",
-      "retry": "Riprova"
+      "retry": "Riprova",
+      "release_notes": "Note di rilascio",
+      "no_changelog": "Nessuna nota di rilascio disponibile",
+      "skip_version": "Ignora questa versione",
+      "cancel": "Annulla",
+      "verifying": "Verifica in corso...",
+      "installing": "Installazione in corso...",
+      "skipped_version": "Ignorata: v{{version}}",
+      "clear_skip": "Cancella"
     },
     "errors": {
       "create_group_failed": "Impossibile creare gruppo: {{error}}",

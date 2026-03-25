@@ -31,7 +31,7 @@ import {
     SelectLabel,
     SelectSeparator
 } from '../ui/select';
-import { Monitor, Key, Terminal as TerminalIcon, Shield, Plus, Trash2, FolderInput, Sparkles, Square, HardDrive, HelpCircle, Github, ExternalLink, Keyboard, RefreshCw, ImageIcon, X, Code2, WifiOff, Download, Upload, Network, ArrowLeftRight, Settings, Folder, ListTree, Rocket, Puzzle, Activity, Loader2, CheckCircle2, ArrowDownToLine, RotateCw, Wrench, FileText, Pen, FolderOpen, Search, GitBranch, Radio, CirclePlus, CircleStop, FolderSearch, FileCode, Info, MousePointer2, FlaskConical, BookOpen } from 'lucide-react';
+import { Monitor, Key, Terminal as TerminalIcon, Shield, Plus, Trash2, FolderInput, Sparkles, Square, HardDrive, HelpCircle, Github, ExternalLink, Keyboard, RefreshCw, ImageIcon, X, Code2, WifiOff, Download, Upload, Network, ArrowLeftRight, Settings, Folder, ListTree, Rocket, Puzzle, Activity, Loader2, CheckCircle2, ArrowDownToLine, RotateCw, Wrench, FileText, Pen, FolderOpen, Search, GitBranch, Radio, CirclePlus, CircleStop, FolderSearch, FileCode, Info, MousePointer2, FlaskConical, BookOpen, SkipForward, ArrowRight } from 'lucide-react';
 import { api } from '../../lib/api';
 import { TOOL_GROUPS, WRITE_TOOLS, EXPERIMENTAL_TOOLS } from '../../lib/ai/tools';
 import { McpServersPanel } from './McpServersPanel';
@@ -348,6 +348,26 @@ const LocalTerminalSettings = () => {
 };
 
 // Help & About Section Component
+const formatBytes = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+};
+
+const formatSpeed = (bytesPerSec: number): string => {
+    if (bytesPerSec <= 0) return '0 B/s';
+    return `${formatBytes(bytesPerSec)}/s`;
+};
+
+const formatEta = (seconds: number): string => {
+    if (seconds > 86400) return '...';
+    if (seconds < 60) return `~${Math.round(seconds)}s`;
+    const m = Math.floor(seconds / 60);
+    const s = Math.round(seconds % 60);
+    return s > 0 ? `~${m}m ${s}s` : `~${m}m`;
+};
+
 const HelpAboutSection = () => {
     const { t } = useTranslation();
     const [appVersion, setAppVersion] = useState<string>('...');
@@ -387,9 +407,9 @@ const HelpAboutSection = () => {
                 </div>
 
                 {/* Update check UI */}
-                <div className="mt-4 pt-4 border-t border-theme-border/50 space-y-2">
+                <div className="mt-4 pt-4 border-t border-theme-border/50 space-y-3">
+                    {/* Row 1: Check button + inline status */}
                     <div className="flex items-center gap-3">
-                        {/* 检查更新按钮 — 始终显示，下载/重启时禁用 */}
                         <Button
                             variant="outline"
                             size="sm"
@@ -404,7 +424,6 @@ const HelpAboutSection = () => {
                             {t('settings_view.help.check_update')}
                         </Button>
 
-                        {/* 各状态行内提示 */}
                         {updater.stage === 'checking' && (
                             <span className="text-sm text-theme-text-muted">
                                 {t('settings_view.help.checking')}
@@ -416,20 +435,12 @@ const HelpAboutSection = () => {
                                 {t('settings_view.help.up_to_date')}
                             </span>
                         )}
-                        {updater.stage === 'available' && (
-                            <span className="flex items-center gap-1.5 text-sm">
-                                <span className="text-theme-text">{t('settings_view.help.update_available')}</span>
-                                <span className="font-mono text-theme-accent">v{updater.newVersion}</span>
-                            </span>
-                        )}
-                        {(updater.stage === 'downloading' || updater.stage === 'verifying' || updater.stage === 'installing') && (
+                        {(updater.stage === 'verifying' || updater.stage === 'installing') && (
                             <span className="text-sm text-theme-text-muted">
-                                {updater.stage === 'downloading'
-                                    ? `${t('settings_view.help.downloading')} ${updater.totalBytes ? Math.round((updater.downloadedBytes / updater.totalBytes) * 100) : 0}%`
-                                    : updater.stage === 'verifying'
-                                        ? t('settings_view.help.verifying', 'Verifying...')
-                                        : t('settings_view.help.installing', 'Installing...')}
-                                {updater.attempt > 1 && ` (${t('settings_view.help.retry', 'Retry')} #${updater.attempt})`}
+                                {updater.stage === 'verifying'
+                                    ? t('settings_view.help.verifying')
+                                    : t('settings_view.help.installing')}
+                                {updater.attempt > 1 && ` (${t('settings_view.help.retry')} #${updater.attempt})`}
                             </span>
                         )}
                         {updater.stage === 'ready' && (
@@ -443,29 +454,7 @@ const HelpAboutSection = () => {
                             </span>
                         )}
 
-                        {/* 下载 / 取消 / 重启操作按钮 */}
-                        {updater.stage === 'available' && (
-                            <Button
-                                variant="default"
-                                size="sm"
-                                onClick={updater.startDownload}
-                                className="gap-2 shrink-0 ml-auto"
-                            >
-                                <ArrowDownToLine className="h-3.5 w-3.5" />
-                                {t('settings_view.help.download_install')}
-                            </Button>
-                        )}
-                        {updater.stage === 'downloading' && (
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={updater.cancelDownload}
-                                className="gap-2 shrink-0 ml-auto"
-                            >
-                                <X className="h-3.5 w-3.5" />
-                                {t('settings_view.help.cancel', 'Cancel')}
-                            </Button>
-                        )}
+                        {/* Ready → Restart button */}
                         {updater.stage === 'ready' && (
                             <Button
                                 variant="default"
@@ -479,13 +468,124 @@ const HelpAboutSection = () => {
                         )}
                     </div>
 
-                    {/* 下载进度条 */}
+                    {/* Available: version comparison + release notes + action buttons */}
+                    {updater.stage === 'available' && (
+                        <div className="space-y-3">
+                            {/* Version comparison */}
+                            <div className="flex items-center gap-2 text-sm">
+                                <span className="text-theme-text">{t('settings_view.help.update_available')}</span>
+                                <span className="font-mono text-theme-text-muted">v{updater.currentVersion ?? appVersion}</span>
+                                <ArrowRight className="h-3.5 w-3.5 text-theme-accent shrink-0" />
+                                <span className="font-mono text-theme-accent font-medium">v{updater.newVersion}</span>
+                            </div>
+
+                            {/* Release notes */}
+                            {updater.releaseBody ? (
+                                <div className="rounded-md border border-theme-border/50 bg-theme-bg/50 p-3 max-h-48 overflow-y-auto">
+                                    <h5 className="text-xs font-medium text-theme-text-muted uppercase tracking-wider mb-2">
+                                        {t('settings_view.help.release_notes')}
+                                    </h5>
+                                    <p className="text-sm text-theme-text whitespace-pre-wrap leading-relaxed">
+                                        {updater.releaseBody}
+                                    </p>
+                                </div>
+                            ) : (
+                                <p className="text-xs text-theme-text-muted italic">
+                                    {t('settings_view.help.no_changelog')}
+                                </p>
+                            )}
+
+                            {/* Action buttons: Skip + Download */}
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => updater.newVersion && updater.skipVersion(updater.newVersion)}
+                                    className="gap-2 text-theme-text-muted hover:text-theme-text"
+                                >
+                                    <SkipForward className="h-3.5 w-3.5" />
+                                    {t('settings_view.help.skip_version')}
+                                </Button>
+                                <Button
+                                    variant="default"
+                                    size="sm"
+                                    onClick={updater.startDownload}
+                                    className="gap-2 shrink-0 ml-auto"
+                                >
+                                    <ArrowDownToLine className="h-3.5 w-3.5" />
+                                    {t('settings_view.help.download_install')}
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Downloading: progress bar + details + cancel */}
                     {updater.stage === 'downloading' && (
-                        <div className="h-1.5 bg-theme-bg rounded-full overflow-hidden">
+                        <div className="space-y-2">
+                            {/* Status text */}
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm text-theme-text-muted">
+                                    {t('settings_view.help.downloading')}
+                                    {updater.attempt > 1 && ` (${t('settings_view.help.retry')} #${updater.attempt})`}
+                                </span>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={updater.cancelDownload}
+                                    className="gap-1.5 h-7 text-xs text-theme-text-muted hover:text-theme-text"
+                                >
+                                    <X className="h-3 w-3" />
+                                    {t('settings_view.help.cancel')}
+                                </Button>
+                            </div>
+
+                            {/* Progress bar */}
                             <div
-                                className="h-full bg-theme-accent rounded-full transition-[width] duration-300"
-                                style={{ width: `${updater.totalBytes ? (updater.downloadedBytes / updater.totalBytes) * 100 : 0}%` }}
-                            />
+                                role="progressbar"
+                                aria-valuenow={updater.totalBytes ? Math.round((updater.downloadedBytes / updater.totalBytes) * 100) : 0}
+                                aria-valuemin={0}
+                                aria-valuemax={100}
+                                className="h-1.5 bg-theme-bg rounded-full overflow-hidden"
+                            >
+                                <div
+                                    className="h-full bg-theme-accent rounded-full transition-[width] duration-300"
+                                    style={{ width: `${updater.totalBytes ? Math.min(100, (updater.downloadedBytes / updater.totalBytes) * 100) : 0}%` }}
+                                />
+                            </div>
+
+                            {/* Size + speed + ETA */}
+                            <div className="flex items-center justify-between text-xs text-theme-text-muted">
+                                <span>
+                                    {updater.totalBytes
+                                        ? `${formatBytes(updater.downloadedBytes)} / ${formatBytes(updater.totalBytes)}`
+                                        : formatBytes(updater.downloadedBytes)
+                                    }
+                                </span>
+                                <span className="tabular-nums">
+                                    {updater.downloadSpeed > 0 && formatSpeed(updater.downloadSpeed)}
+                                    {updater.downloadSpeed > 0 && updater.etaSeconds != null && updater.etaSeconds > 0 && (
+                                        <> · {formatEta(updater.etaSeconds)}</>
+                                    )}
+                                    {updater.totalBytes && updater.totalBytes > 0 && (
+                                        <> · {Math.round((updater.downloadedBytes / updater.totalBytes) * 100)}%</>
+                                    )}
+                                </span>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Skipped version indicator */}
+                    {updater.skippedVersion && updater.stage === 'idle' && (
+                        <div className="flex items-center gap-2 text-xs text-theme-text-muted">
+                            <SkipForward className="h-3 w-3 shrink-0" />
+                            <span>{t('settings_view.help.skipped_version', { version: updater.skippedVersion })}</span>
+                            <button
+                                type="button"
+                                onClick={() => updater.clearSkippedVersion()}
+                                className="text-theme-accent hover:underline cursor-pointer"
+                            >
+                                {t('settings_view.help.clear_skip')}
+                            </button>
                         </div>
                     )}
                 </div>

@@ -473,7 +473,15 @@
       "ready_to_restart": "更新已安装，重启后生效",
       "restart_now": "立即重启",
       "update_error": "检查更新失败",
-      "retry": "重试"
+      "retry": "重试",
+      "release_notes": "更新日志",
+      "no_changelog": "暂无更新日志",
+      "skip_version": "跳过此版本",
+      "cancel": "取消",
+      "verifying": "正在校验...",
+      "installing": "正在安装...",
+      "skipped_version": "已跳过: v{{version}}",
+      "clear_skip": "清除"
     },
     "errors": {
       "create_group_failed": "创建分组失败: {{error}}",

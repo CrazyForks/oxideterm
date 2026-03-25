@@ -473,7 +473,15 @@
       "ready_to_restart": "Cập nhật đã cài đặt — khởi động lại để áp dụng",
       "restart_now": "Khởi động lại ngay",
       "update_error": "Kiểm tra cập nhật thất bại",
-      "retry": "Thử lại"
+      "retry": "Thử lại",
+      "release_notes": "Ghi chú phát hành",
+      "no_changelog": "Không có ghi chú phát hành",
+      "skip_version": "Bỏ qua phiên bản này",
+      "cancel": "Hủy",
+      "verifying": "Đang xác minh...",
+      "installing": "Đang cài đặt...",
+      "skipped_version": "Đã bỏ qua: v{{version}}",
+      "clear_skip": "Xóa"
     },
     "errors": {
       "create_group_failed": "Không thể tạo nhóm: {{error}}",

@@ -473,7 +473,15 @@
       "ready_to_restart": "업데이트 설치 완료 — 재시작하여 적용",
       "restart_now": "지금 재시작",
       "update_error": "업데이트 확인 실패",
-      "retry": "재시도"
+      "retry": "재시도",
+      "release_notes": "릴리스 노트",
+      "no_changelog": "릴리스 노트 없음",
+      "skip_version": "이 버전 건너뛰기",
+      "cancel": "취소",
+      "verifying": "검증 중...",
+      "installing": "설치 중...",
+      "skipped_version": "건너뛴 버전: v{{version}}",
+      "clear_skip": "해제"
     },
     "errors": {
       "create_group_failed": "그룹 생성 실패: {{error}}",

@@ -473,7 +473,15 @@
       "ready_to_restart": "Mise à jour installée — redémarrez pour appliquer",
       "restart_now": "Redémarrer maintenant",
       "update_error": "Échec de la vérification des mises à jour",
-      "retry": "Réessayer"
+      "retry": "Réessayer",
+      "release_notes": "Notes de version",
+      "no_changelog": "Aucune note de version disponible",
+      "skip_version": "Ignorer cette version",
+      "cancel": "Annuler",
+      "verifying": "Vérification...",
+      "installing": "Installation...",
+      "skipped_version": "Ignorée : v{{version}}",
+      "clear_skip": "Effacer"
     },
     "errors": {
       "create_group_failed": "Échec de la création du groupe : {{error}}",

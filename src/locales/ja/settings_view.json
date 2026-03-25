@@ -473,7 +473,15 @@
       "ready_to_restart": "更新がインストールされました — 再起動して適用",
       "restart_now": "今すぐ再起動",
       "update_error": "更新の確認に失敗しました",
-      "retry": "再試行"
+      "retry": "再試行",
+      "release_notes": "リリースノート",
+      "no_changelog": "リリースノートはありません",
+      "skip_version": "このバージョンをスキップ",
+      "cancel": "キャンセル",
+      "verifying": "検証中...",
+      "installing": "インストール中...",
+      "skipped_version": "スキップ済み: v{{version}}",
+      "clear_skip": "解除"
     },
     "errors": {
       "create_group_failed": "グループの作成に失敗しました: {{error}}",

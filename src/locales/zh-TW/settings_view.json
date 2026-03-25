@@ -473,7 +473,15 @@
       "ready_to_restart": "更新已安裝，重新啟動後生效",
       "restart_now": "立即重啟",
       "update_error": "檢查更新失敗",
-      "retry": "重試"
+      "retry": "重試",
+      "release_notes": "更新日誌",
+      "no_changelog": "暫無更新日誌",
+      "skip_version": "跳過此版本",
+      "cancel": "取消",
+      "verifying": "正在校驗...",
+      "installing": "正在安裝...",
+      "skipped_version": "已跳過: v{{version}}",
+      "clear_skip": "清除"
     },
     "errors": {
       "create_group_failed": "無法建立群組：{{error}}",

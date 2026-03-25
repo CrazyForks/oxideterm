@@ -473,7 +473,15 @@
       "ready_to_restart": "Update installiert — Neustart zum Anwenden",
       "restart_now": "Jetzt neu starten",
       "update_error": "Update-Prüfung fehlgeschlagen",
-      "retry": "Erneut versuchen"
+      "retry": "Erneut versuchen",
+      "release_notes": "Versionshinweise",
+      "no_changelog": "Keine Versionshinweise verfügbar",
+      "skip_version": "Diese Version überspringen",
+      "cancel": "Abbrechen",
+      "verifying": "Überprüfung...",
+      "installing": "Installation...",
+      "skipped_version": "Übersprungen: v{{version}}",
+      "clear_skip": "Löschen"
     },
     "errors": {
       "create_group_failed": "Gruppe konnte nicht erstellt werden: {{error}}",

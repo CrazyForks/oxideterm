@@ -58,8 +58,12 @@ type UpdateState = PersistedState & {
   stage: UpdateStage;
   newVersion: string | null;
   currentVersion: string | null;
+  releaseBody: string | null;
+  releaseDate: string | null;
   downloadedBytes: number;
   totalBytes: number | null;
+  downloadSpeed: number;
+  etaSeconds: number | null;
   errorMessage: string | null;
   resumableTaskId: string | null;
   attempt: number;
@@ -82,6 +86,40 @@ type UpdateState = PersistedState & {
 let _updateRef: Update | null = null;
 let _autoCheckTimer: ReturnType<typeof setTimeout> | null = null;
 
+// Sliding window for download speed calculation (3-second window)
+type SpeedSample = { time: number; bytes: number };
+let _speedSamples: SpeedSample[] = [];
+const SPEED_WINDOW_MS = 3000;
+
+function updateSpeedMetrics(downloadedBytes: number, totalBytes: number | null): { downloadSpeed: number; etaSeconds: number | null } {
+  const now = Date.now();
+  _speedSamples.push({ time: now, bytes: downloadedBytes });
+  // Trim samples older than the window
+  const cutoff = now - SPEED_WINDOW_MS;
+  _speedSamples = _speedSamples.filter(s => s.time >= cutoff);
+
+  if (_speedSamples.length < 2) {
+    return { downloadSpeed: 0, etaSeconds: null };
+  }
+
+  const oldest = _speedSamples[0];
+  const newest = _speedSamples[_speedSamples.length - 1];
+  const deltaMs = newest.time - oldest.time;
+  if (deltaMs <= 0) {
+    return { downloadSpeed: 0, etaSeconds: null };
+  }
+
+  const speed = ((newest.bytes - oldest.bytes) / deltaMs) * 1000; // bytes/sec
+  const remaining = totalBytes != null ? totalBytes - downloadedBytes : null;
+  const eta = speed > 0 && remaining != null ? remaining / speed : null;
+
+  return { downloadSpeed: Math.max(0, speed), etaSeconds: eta != null ? Math.max(0, eta) : null };
+}
+
+function resetSpeedMetrics() {
+  _speedSamples = [];
+}
+
 type SetFn = (partial: Partial<UpdateState>) => void;
 type GetFn = () => UpdateState;
 
@@ -93,7 +131,8 @@ async function legacyDownload(set: SetFn, get: GetFn) {
     return;
   }
 
-  set({ stage: 'downloading', downloadedBytes: 0, totalBytes: null });
+  resetSpeedMetrics();
+  set({ stage: 'downloading', downloadedBytes: 0, totalBytes: null, downloadSpeed: 0, etaSeconds: null });
   try {
     let totalLen = 0;
     let downloaded = 0;
@@ -103,9 +142,10 @@ async function legacyDownload(set: SetFn, get: GetFn) {
         set({ totalBytes: totalLen || null });
       } else if (event.event === 'Progress') {
         downloaded += event.data.chunkLength;
-        set({ downloadedBytes: downloaded });
+        const metrics = updateSpeedMetrics(downloaded, totalLen || null);
+        set({ downloadedBytes: downloaded, ...metrics });
       } else if (event.event === 'Finished') {
-        set({ downloadedBytes: totalLen, stage: 'ready' });
+        set({ downloadedBytes: totalLen, stage: 'ready', downloadSpeed: 0, etaSeconds: null });
       }
     });
     // Fallback if Finished event didn't fire
@@ -131,8 +171,12 @@ export const useUpdateStore = create<UpdateState>()(
       stage: 'idle' as UpdateStage,
       newVersion: null,
       currentVersion: null,
+      releaseBody: null,
+      releaseDate: null,
       downloadedBytes: 0,
       totalBytes: null,
+      downloadSpeed: 0,
+      etaSeconds: null,
       errorMessage: null,
       resumableTaskId: null,
       attempt: 0,
@@ -161,6 +205,8 @@ export const useUpdateStore = create<UpdateState>()(
               stage: 'available',
               newVersion: update.version,
               currentVersion: update.currentVersion,
+              releaseBody: update.body ?? null,
+              releaseDate: update.date ?? null,
               lastCheckedAt: Date.now(),
             });
           } else {
@@ -188,10 +234,13 @@ export const useUpdateStore = create<UpdateState>()(
         const { newVersion } = get();
         if (!newVersion) return;
 
+        resetSpeedMetrics();
         set({
           stage: 'downloading',
           downloadedBytes: 0,
           totalBytes: null,
+          downloadSpeed: 0,
+          etaSeconds: null,
           errorMessage: null,
           attempt: 1,
           retryDelayMs: null,
@@ -219,12 +268,15 @@ export const useUpdateStore = create<UpdateState>()(
         } catch {
           // Ignore cancel errors
         }
+        _speedSamples = [];
         set({
           stage: 'idle',
           resumableTaskId: null,
           downloadedBytes: 0,
           totalBytes: null,
           errorMessage: null,
+          downloadSpeed: 0,
+          etaSeconds: null,
         });
       },
 
@@ -279,12 +331,15 @@ export const useUpdateStore = create<UpdateState>()(
                 });
                 break;
 
-              case 'progress':
+              case 'progress': {
+                const metrics = updateSpeedMetrics(payload.downloadedBytes, payload.totalBytes);
                 set({
                   downloadedBytes: payload.downloadedBytes,
                   totalBytes: payload.totalBytes,
+                  ...metrics,
                 });
                 break;
+              }
 
               case 'retrying':
                 set({
@@ -302,10 +357,13 @@ export const useUpdateStore = create<UpdateState>()(
                 break;
 
               case 'ready':
+                resetSpeedMetrics();
                 set({
                   stage: 'ready',
                   downloadedBytes: payload.downloadedBytes,
                   totalBytes: payload.totalBytes,
+                  downloadSpeed: 0,
+                  etaSeconds: null,
                 });
                 break;
 
@@ -317,11 +375,14 @@ export const useUpdateStore = create<UpdateState>()(
                 break;
 
               case 'cancelled':
+                resetSpeedMetrics();
                 set({
                   stage: 'idle',
                   resumableTaskId: null,
                   downloadedBytes: 0,
                   totalBytes: null,
+                  downloadSpeed: 0,
+                  etaSeconds: null,
                 });
                 break;
             }
