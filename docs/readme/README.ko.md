@@ -5,9 +5,9 @@
 <h1 align="center">⚡ OxideTerm</h1>
 
 <p align="center">
-  <strong>Rust 기반 터미널 엔진 — SSH를 넘어서</strong>
+  <strong>로컬 터미널 + SSH + SFTP + AI, 하나의 네이티브 앱으로.</strong>
   <br>
-  <em>130,000줄 이상의 Rust &amp; TypeScript 코드. Electron 없음. SSH 스택에 C 의존성 없음.</em>
+  <em>Electron 없음. OpenSSL 없음. 순수 Rust SSH 스택.</em>
 </p>
 
 <p align="center">
@@ -16,6 +16,12 @@
   <img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blueviolet" alt="License">
   <img src="https://img.shields.io/badge/rust-1.75+-orange" alt="Rust">
   <img src="https://img.shields.io/badge/tauri-2.0-purple" alt="Tauri">
+</p>
+
+<p align="center">
+  <a href="https://github.com/AnalyseDeCircuit/oxideterm/releases/latest">
+    <img src="https://img.shields.io/github/v/release/AnalyseDeCircuit/oxideterm?label=%EC%B5%9C%EC%8B%A0%EB%B2%84%EC%A0%84+%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C&style=for-the-badge&color=brightgreen" alt="최신버전 다운로드">
+  </a>
 </p>
 
 <p align="center">

@@ -5,9 +5,9 @@
 <h1 align="center">⚡ OxideTerm</h1>
 
 <p align="center">
-  <strong>Rust-Betriebener Terminal-Engine — Jenseits von SSH</strong>
+  <strong>Lokales Terminal + SSH + SFTP + KI in einer nativen App.</strong>
   <br>
-  <em>130.000+ Zeilen Rust &amp; TypeScript. Kein Electron. Keine C-Abhängigkeiten im SSH-Stack.</em>
+  <em>Kein Electron. Kein OpenSSL. Reiner Rust-SSH-Stack.</em>
 </p>
 
 <p align="center">
@@ -16,6 +16,12 @@
   <img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blueviolet" alt="Lizenz">
   <img src="https://img.shields.io/badge/rust-1.75+-orange" alt="Rust">
   <img src="https://img.shields.io/badge/tauri-2.0-purple" alt="Tauri">
+</p>
+
+<p align="center">
+  <a href="https://github.com/AnalyseDeCircuit/oxideterm/releases/latest">
+    <img src="https://img.shields.io/github/v/release/AnalyseDeCircuit/oxideterm?label=Herunterladen&style=for-the-badge&color=brightgreen" alt="Neueste Version herunterladen">
+  </a>
 </p>
 
 <p align="center">

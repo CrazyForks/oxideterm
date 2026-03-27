@@ -5,9 +5,9 @@
 <h1 align="center">⚡ OxideTerm</h1>
 
 <p align="center">
-  <strong>Công Cụ Terminal Chạy Bằng Rust — Vượt Xa SSH</strong>
+  <strong>Terminal cục bộ + SSH + SFTP + AI trong một ứng dụng native.</strong>
   <br>
-  <em>Hơn 130.000 dòng mã Rust &amp; TypeScript. Không Electron. Không phụ thuộc C trong ngăn xếp SSH.</em>
+  <em>Không Electron. Không OpenSSL. SSH stack thuần Rust.</em>
 </p>
 
 <p align="center">
@@ -16,6 +16,12 @@
   <img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blueviolet" alt="License">
   <img src="https://img.shields.io/badge/rust-1.75+-orange" alt="Rust">
   <img src="https://img.shields.io/badge/tauri-2.0-purple" alt="Tauri">
+</p>
+
+<p align="center">
+  <a href="https://github.com/AnalyseDeCircuit/oxideterm/releases/latest">
+    <img src="https://img.shields.io/github/v/release/AnalyseDeCircuit/oxideterm?label=T%E1%BA%A3i+xu%E1%BB%91ng&style=for-the-badge&color=brightgreen" alt="Tải xuống phiên bản mới nhất">
+  </a>
 </p>
 
 <p align="center">

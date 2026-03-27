@@ -5,9 +5,9 @@
 <h1 align="center">⚡ OxideTerm</h1>
 
 <p align="center">
-  <strong>Rustで駆動するターミナルエンジン — SSHを超えて</strong>
+  <strong>ローカルシェル + SSH + SFTP + AI をひとつのネイティブアプリで。</strong>
   <br>
-  <em>130,000行以上のRust &amp; TypeScriptコード。Electron不要。SSHスタックにC依存なし。</em>
+  <em>Electron不要。OpenSSL不要。純粋なRust SSHスタック。</em>
 </p>
 
 <p align="center">
@@ -16,6 +16,12 @@
   <img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blueviolet" alt="License">
   <img src="https://img.shields.io/badge/rust-1.75+-orange" alt="Rust">
   <img src="https://img.shields.io/badge/tauri-2.0-purple" alt="Tauri">
+</p>
+
+<p align="center">
+  <a href="https://github.com/AnalyseDeCircuit/oxideterm/releases/latest">
+    <img src="https://img.shields.io/github/v/release/AnalyseDeCircuit/oxideterm?label=%E6%9C%80%E6%96%B0%E7%89%88%E3%82%92%E3%83%80%E3%82%A6%E3%83%B3%E3%83%AD%E3%83%BC%E3%83%89&style=for-the-badge&color=brightgreen" alt="最新版をダウンロード">
+  </a>
 </p>
 
 <p align="center">

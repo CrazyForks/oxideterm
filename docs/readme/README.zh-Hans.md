@@ -5,9 +5,9 @@
 <h1 align="center">⚡ OxideTerm</h1>
 
 <p align="center">
-  <strong>Rust 驱动的终端引擎 — 不止于 SSH</strong>
+  <strong>本地终端 + SSH + SFTP + AI，一个原生应用全搞定。</strong>
   <br>
-  <em>130,000+ 行 Rust &amp; TypeScript 代码。零 Electron。SSH 栈零 C 依赖。</em>
+  <em>零 Electron。零 OpenSSL。纯 Rust SSH 栈。</em>
 </p>
 
 <p align="center">
@@ -16,6 +16,12 @@
   <img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blueviolet" alt="License">
   <img src="https://img.shields.io/badge/rust-1.75+-orange" alt="Rust">
   <img src="https://img.shields.io/badge/tauri-2.0-purple" alt="Tauri">
+</p>
+
+<p align="center">
+  <a href="https://github.com/AnalyseDeCircuit/oxideterm/releases/latest">
+    <img src="https://img.shields.io/github/v/release/AnalyseDeCircuit/oxideterm?label=下载最新版&style=for-the-badge&color=brightgreen" alt="下载最新版">
+  </a>
 </p>
 
 <p align="center">
