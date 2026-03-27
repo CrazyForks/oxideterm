@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { 
   Folder, 
@@ -504,8 +505,8 @@ const FileList = ({
         })}
       </div>
 
-      {/* Context Menu */}
-      {contextMenu && (
+      {/* Context Menu — rendered via Portal to escape contain:layout containment */}
+      {contextMenu && createPortal(
         <div 
           className="fixed z-50 bg-theme-bg-panel border border-theme-border rounded-sm shadow-lg py-1 min-w-[180px]"
           style={{ left: contextMenu.x, top: contextMenu.y }}
@@ -591,7 +592,8 @@ const FileList = ({
               <FolderPlus className="h-3 w-3" /> {t('sftp.context.new_folder')}
             </button>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
