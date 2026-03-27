@@ -1225,7 +1225,7 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
       // ========== Phase 1: 后端物理销毁 ==========
       
       // 1a. 关闭该节点的所有终端
-      const terminalIds = get().nodeTerminalMap.get(nodeId) || [];
+      const terminalIds = [...(get().nodeTerminalMap.get(nodeId) || [])];
       
       // 也检查后端记录的 terminalSessionId
       if (node.terminalSessionId && !terminalIds.includes(node.terminalSessionId)) {
@@ -1418,14 +1418,19 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
       const existing = newTerminalMap.get(nodeId) || [];
       const filtered = existing.filter(id => id !== terminalId);
       
-      if (filtered.length > 0) {
-        newTerminalMap.set(nodeId, filtered);
-      } else {
-        newTerminalMap.delete(nodeId);
-      }
+      // 使用 set(nodeId, []) 而非 delete — 空数组是 truthy，
+      // 防止 rebuildUnifiedNodes 回退读取后端已过期的 terminalSessionId
+      newTerminalMap.set(nodeId, filtered);
       newNodeMap.delete(terminalId);
       
       set({ nodeTerminalMap: newTerminalMap, terminalNodeMap: newNodeMap });
+      
+      // 当移除最后一个终端时，清除后端持久化的 terminalSessionId
+      if (filtered.length === 0) {
+        api.clearTreeNodeTerminal(nodeId).catch(e => {
+          console.error('Failed to clear terminal session id:', e);
+        });
+      }
       
       // 调用 API 关闭终端
       try {
@@ -1448,12 +1453,16 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
 
       const existing = newTerminalMap.get(nodeId) || [];
       const filtered = existing.filter(id => id !== terminalId);
-      if (filtered.length > 0) {
-        newTerminalMap.set(nodeId, filtered);
-      } else {
-        newTerminalMap.delete(nodeId);
-      }
+      // 同 closeTerminalForNode：使用空数组防止 rebuildUnifiedNodes 回退
+      newTerminalMap.set(nodeId, filtered);
       newNodeMap.delete(terminalId);
+
+      // 清除后端持久化的 terminalSessionId
+      if (filtered.length === 0) {
+        api.clearTreeNodeTerminal(nodeId).catch(e => {
+          console.error('Failed to clear terminal session id:', e);
+        });
+      }
 
       set({ nodeTerminalMap: newTerminalMap, terminalNodeMap: newNodeMap });
       get().rebuildUnifiedNodes();
@@ -1879,9 +1888,9 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
             [...linkDownNodeIds].filter(id => validNodeIds.has(id))
           );
           
-          // 清理孤儿节点的终端映射
+          // 清理孤儿节点的终端映射（同时过滤空数组防止积累）
           const newTerminalMap = new Map(
-            [...nodeTerminalMap].filter(([nodeId]) => validNodeIds.has(nodeId))
+            [...nodeTerminalMap].filter(([nodeId, terminals]) => validNodeIds.has(nodeId) && terminals.length > 0)
           );
           const newNodeMap = new Map<string, string>();
           for (const [nodeId, terminals] of newTerminalMap) {

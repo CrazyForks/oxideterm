@@ -480,6 +480,16 @@ impl SessionTree {
         Ok(())
     }
 
+    /// 清除终端会话 ID（当所有终端关闭时）
+    pub fn clear_terminal_session_id(&mut self, node_id: &str) -> Result<(), TreeError> {
+        let node = self
+            .nodes
+            .get_mut(node_id)
+            .ok_or_else(|| TreeError::NodeNotFound(node_id.to_string()))?;
+        node.terminal_session_id = None;
+        Ok(())
+    }
+
     /// 关联 SFTP 会话 ID
     pub fn set_sftp_session_id(
         &mut self,

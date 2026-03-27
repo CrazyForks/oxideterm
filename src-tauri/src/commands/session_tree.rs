@@ -395,6 +395,18 @@ pub async fn set_tree_node_terminal(
     Ok(())
 }
 
+/// 清除节点的终端会话 ID（当所有终端关闭时）
+#[tauri::command]
+pub async fn clear_tree_node_terminal(
+    state: State<'_, Arc<SessionTreeState>>,
+    node_id: String,
+) -> Result<(), String> {
+    let mut tree = state.tree.write().await;
+    tree.clear_terminal_session_id(&node_id)
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 /// 关联 SFTP 会话 ID 到节点
 #[tauri::command]
 pub async fn set_tree_node_sftp(

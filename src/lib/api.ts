@@ -914,6 +914,14 @@ export const api = {
   },
 
   /**
+   * 清除节点的终端会话 ID（当所有终端关闭时）
+   */
+  clearTreeNodeTerminal: async (nodeId: string): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('clear_tree_node_terminal', { nodeId });
+  },
+
+  /**
    * 关联 SFTP 会话 ID 到节点
    */
   setTreeNodeSftp: async (nodeId: string, sessionId: string): Promise<void> => {
