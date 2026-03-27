@@ -6,8 +6,10 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirro
 import { indentOnInput, bracketMatching, foldGutter, foldKeymap } from '@codemirror/language';
 import { highlightSelectionMatches, search } from '@codemirror/search';
 import { autocompletion, completionKeymap, type CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
-import { oneDark } from '@codemirror/theme-one-dark';
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { tags as t } from '@lezer/highlight';
 import { indentationMarkers } from '@replit/codemirror-indentation-markers';
+import { showMinimap } from '@replit/codemirror-minimap';
 import { loadLanguage } from '../../../lib/codemirror/languageLoader';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { getFontFamily } from '../../../lib/fontFamily';
@@ -150,6 +152,48 @@ function buildOxideTheme(fontFamily: string, fontSize: number, lineHeight: numbe
     display: 'none !important',
   },
 });
+}
+
+/**
+ * Syntax highlighting that reads from CSS custom properties set by the app theme system.
+ * Falls back to reasonable dark-theme defaults when variables are unset.
+ * Unlike oneDark (static import), this adapts at runtime when the user switches themes.
+ */
+function buildOxideSyntaxHighlighting() {
+  const style = HighlightStyle.define([
+    { tag: t.keyword,      color: 'var(--theme-syntax-keyword, #c678dd)' },
+    { tag: [t.name, t.deleted, t.character, t.macroName],
+                            color: 'var(--theme-syntax-name, #e06c75)' },
+    { tag: [t.function(t.variableName), t.labelName],
+                            color: 'var(--theme-syntax-function, #61afef)' },
+    { tag: [t.color, t.constant(t.name), t.standard(t.name)],
+                            color: 'var(--theme-syntax-constant, #d19a66)' },
+    { tag: [t.definition(t.name), t.separator],
+                            color: 'var(--theme-syntax-definition, #abb2bf)' },
+    { tag: [t.typeName, t.className, t.number, t.changed, t.annotation,
+            t.modifier, t.self, t.namespace],
+                            color: 'var(--theme-syntax-type, #e5c07b)' },
+    { tag: [t.operator, t.operatorKeyword, t.url, t.escape, t.regexp,
+            t.link, t.special(t.string)],
+                            color: 'var(--theme-syntax-operator, #56b6c2)' },
+    { tag: [t.meta, t.comment],
+                            color: 'var(--theme-syntax-comment, #5c6370)',
+                            fontStyle: 'italic' },
+    { tag: t.strong,        fontWeight: 'bold' },
+    { tag: t.emphasis,      fontStyle: 'italic' },
+    { tag: t.strikethrough, textDecoration: 'line-through' },
+    { tag: t.link,          color: 'var(--theme-syntax-link, #61afef)',
+                            textDecoration: 'underline' },
+    { tag: t.heading,       fontWeight: 'bold',
+                            color: 'var(--theme-syntax-heading, #e06c75)' },
+    { tag: [t.atom, t.bool, t.special(t.variableName)],
+                            color: 'var(--theme-syntax-atom, #d19a66)' },
+    { tag: [t.processingInstruction, t.string, t.inserted],
+                            color: 'var(--theme-syntax-string, #98c379)' },
+    { tag: t.invalid,       color: 'var(--theme-syntax-invalid, #ffffff)',
+                            backgroundColor: 'var(--theme-error, #e06c75)' },
+  ]);
+  return syntaxHighlighting(style);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -326,9 +370,19 @@ export function useCodeMirrorEditor(options: UseCodeMirrorEditorOptions): UseCod
         highlightSelectionMatches(),
         // 保持搜索逻辑激活，但通过 CSS 隐藏原生面板
         search(),
-        oneDark,
+        buildOxideSyntaxHighlighting(),
         themeCompartment.of(initialTheme),
         wordWrapCompartment.of(settings.ide?.wordWrap ? EditorView.lineWrapping : []),
+        // Minimap
+        showMinimap.compute([], () => ({
+          create: () => {
+            const dom = document.createElement('div');
+            dom.className = 'cm-minimap-container';
+            return { dom };
+          },
+          displayText: 'blocks',
+          showOverlay: 'mouse-over',
+        })),
         placeholder('…'),
         EditorView.exceptionSink.of((e) => console.warn('CM6:', e)),
         keymap.of([

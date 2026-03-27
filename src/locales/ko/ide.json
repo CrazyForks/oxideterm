@@ -124,6 +124,8 @@
       "unsavedChanges": "저장되지 않은 변경사항이 있습니다"    },
     "tree": {
       "truncated": "{{count}}개 항목이 더 있으나 표시되지 않음"    },
-    "searchQueryTooLong": "검색 쿼리가 너무 깁니다"
+    "searchQueryTooLong": "검색 쿼리가 너무 깁니다",
+    "split_editor": "편집기 분할",
+    "close_split": "분할 닫기"
   }
 }

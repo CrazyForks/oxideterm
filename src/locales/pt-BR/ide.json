@@ -126,6 +126,8 @@
     "tree": {
       "truncated": "+{{count}} itens adicionais não exibidos"
     },
-    "searchQueryTooLong": "Consulta de pesquisa muito longa"
+    "searchQueryTooLong": "Consulta de pesquisa muito longa",
+    "split_editor": "Dividir editor",
+    "close_split": "Fechar divisão"
   }
 }

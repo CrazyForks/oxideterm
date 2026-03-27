@@ -2,7 +2,7 @@
 import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useIdeStore, useIdeProject, useIdeActiveTab, useIdeDirtyCount } from '../../store/ideStore';
-import { GitBranch, Cpu, HardDrive, Trash2, Rocket, Loader2, Info, ExternalLink } from 'lucide-react';
+import { GitBranch, Cpu, HardDrive, Trash2, Rocket, Loader2, Info, ExternalLink, Columns2, X } from 'lucide-react';
 import { useAgentStatus } from './hooks/useAgentStatus';
 import { useConfirm } from '../../hooks/useConfirm';
 import * as agentService from '../../lib/agentService';
@@ -24,6 +24,8 @@ export function IdeStatusBar() {
   const activeTab = useIdeActiveTab();
   const dirtyCount = useIdeDirtyCount();
   const nodeId = useIdeStore(state => state.nodeId);
+  const splitDirection = useIdeStore(state => state.splitDirection);
+  const { splitEditor, closeSplit } = useIdeStore();
   const { mode, label, status, refresh } = useAgentStatus(nodeId ?? undefined);
   const { confirm, ConfirmDialog } = useConfirm();
   const [removing, setRemoving] = useState(false);
@@ -211,6 +213,25 @@ export function IdeStatusBar() {
         <span className="mr-4">{activeTab.language}</span>
       )}
       
+      {/* 分栏编辑器 */}
+      <button
+        className={cn(
+          'flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-theme-bg-hover transition-colors mr-2',
+          splitDirection && 'text-theme-accent',
+        )}
+        onClick={() => splitDirection ? closeSplit() : splitEditor()}
+        title={splitDirection
+          ? t('ide.close_split', 'Close split editor')
+          : t('ide.split_editor', 'Split editor')
+        }
+      >
+        {splitDirection ? (
+          <X className="w-3 h-3" />
+        ) : (
+          <Columns2 className="w-3 h-3" />
+        )}
+      </button>
+
       {/* 未保存文件数 */}
       {dirtyCount > 0 && (
         <span className="ml-auto text-theme-accent">

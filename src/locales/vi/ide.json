@@ -126,6 +126,8 @@
     "tree": {
       "truncated": "+{{count}} mục khác không được hiển thị"
     },
-    "searchQueryTooLong": "Truy vấn tìm kiếm quá dài"
+    "searchQueryTooLong": "Truy vấn tìm kiếm quá dài",
+    "split_editor": "Chia đôi trình soạn",
+    "close_split": "Đóng chia đôi"
   }
 }

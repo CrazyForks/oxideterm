@@ -116,6 +116,10 @@ interface IdeState {
   terminalHeight: number;
   terminalVisible: boolean;
   
+  // ─── 分栏编辑器 ───
+  splitDirection: 'horizontal' | 'vertical' | null; // null = 无分栏
+  splitActiveTabId: string | null; // 分栏侧激活的标签 ID
+  
   // ─── 文件树状态 ───
   expandedPaths: Set<string>;  // 展开的目录路径
   treeRefreshSignal: Record<string, number>; // 树刷新信号 { path: version }
@@ -158,6 +162,7 @@ interface IdeActions {
   updateTabContent: (tabId: string, content: string) => void;
   updateTabCursor: (tabId: string, line: number, col: number) => void;
   togglePinTab: (tabId: string) => void;
+  reorderTabs: (orderedIds: string[]) => void;
   
   // AI 精确编辑操作
   replaceStringInTab: (tabId: string, oldStr: string, newStr: string) => { success: boolean; error?: string };
@@ -167,6 +172,11 @@ interface IdeActions {
   setTreeWidth: (width: number) => void;
   setTerminalHeight: (height: number) => void;
   toggleTerminal: () => void;
+  
+  // 分栏编辑器
+  splitEditor: (direction?: 'horizontal' | 'vertical') => void;
+  closeSplit: () => void;
+  setSplitActiveTab: (tabId: string) => void;
   
   // 文件树操作
   togglePath: (path: string) => void;
@@ -220,6 +230,8 @@ export const useIdeStore = create<IdeState & IdeActions>()(
         treeWidth: 280,
         terminalHeight: 200,
         terminalVisible: false,
+        splitDirection: null,
+        splitActiveTabId: null,
         expandedPaths: new Set<string>(),
         treeRefreshSignal: {},
         conflictState: null,
@@ -290,6 +302,8 @@ export const useIdeStore = create<IdeState & IdeActions>()(
             activeTabId: null,
             expandedPaths: new Set(),
             conflictState: null,
+            splitDirection: null,
+            splitActiveTabId: null,
             cachedProjectPath: null,
             cachedTabPaths: [],
             cachedNodeId: null,
@@ -670,10 +684,43 @@ export const useIdeStore = create<IdeState & IdeActions>()(
           }));
         },
 
+        reorderTabs: (orderedIds) => {
+          set(state => {
+            const tabMap = new Map(state.tabs.map(t => [t.id, t]));
+            const reordered = orderedIds
+              .map(id => tabMap.get(id))
+              .filter((t): t is IdeTab => t !== undefined);
+            return { tabs: reordered };
+          });
+        },
+
         // ─── Layout Actions ───
         setTreeWidth: (width) => set({ treeWidth: width }),
         setTerminalHeight: (height) => set({ terminalHeight: height }),
         toggleTerminal: () => set(state => ({ terminalVisible: !state.terminalVisible })),
+
+        // ─── Split Editor ───
+        splitEditor: (direction = 'horizontal') => {
+          const { activeTabId, tabs } = get();
+          if (!activeTabId || tabs.length < 1) return;
+          // Pick a different tab for the split side, or same tab if only one
+          const otherTab = tabs.find(t => t.id !== activeTabId) || tabs[0];
+          set({
+            splitDirection: direction,
+            splitActiveTabId: otherTab.id,
+          });
+        },
+
+        closeSplit: () => {
+          set({
+            splitDirection: null,
+            splitActiveTabId: null,
+          });
+        },
+
+        setSplitActiveTab: (tabId) => {
+          set({ splitActiveTabId: tabId });
+        },
 
         // ─── File Tree Actions ───
         togglePath: (path) => {

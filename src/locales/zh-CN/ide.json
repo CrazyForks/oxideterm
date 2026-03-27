@@ -126,6 +126,8 @@
     "tree": {
       "truncated": "还有 {{count}} 个项未显示"
     },
-    "searchQueryTooLong": "搜索查询过长"
+    "searchQueryTooLong": "搜索查询过长",
+    "split_editor": "分栏编辑器",
+    "close_split": "关闭分栏"
   }
 }

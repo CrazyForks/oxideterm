@@ -126,6 +126,8 @@
     "tree": {
       "truncated": "+{{count}} more items not shown"
     },
-    "searchQueryTooLong": "Search query too long"
+    "searchQueryTooLong": "Search query too long",
+    "split_editor": "Split editor",
+    "close_split": "Close split editor"
   }
 }

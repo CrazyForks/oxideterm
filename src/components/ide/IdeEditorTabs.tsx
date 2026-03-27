@@ -1,7 +1,22 @@
 // src/components/ide/IdeEditorTabs.tsx
-import { useCallback, useState, useRef } from 'react';
+import { useCallback, useState, useRef, useMemo } from 'react';
 import { X, Circle, Loader2, Pin } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  useSortable,
+  horizontalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useIdeTabs, useIdeStore, IdeTab } from '../../store/ideStore';
 import { cn } from '../../lib/utils';
 import { FileIcon } from '../../lib/fileIcons';
@@ -18,6 +33,22 @@ interface TabItemProps {
 function TabItem({ tab, isActive, onActivate, onClose, onTogglePin }: TabItemProps) {
   const { t } = useTranslation();
   const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null);
+  
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: tab.id });
+  
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+    opacity: isDragging ? 0.7 : undefined,
+  };
   
   const handleClose = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -53,13 +84,18 @@ function TabItem({ tab, isActive, onActivate, onClose, onTogglePin }: TabItemPro
   return (
     <>
       <div
+        ref={setNodeRef}
+        style={style}
+        {...attributes}
+        {...listeners}
         className={cn(
           'group flex items-center gap-1.5 px-3 py-1.5 cursor-pointer',
           'border-r border-theme-border/50 transition-colors',
           'hover:bg-theme-bg-hover/30',
           isActive 
             ? 'bg-theme-bg-hover border-b-2 border-b-theme-accent' 
-            : 'bg-theme-bg/50'
+            : 'bg-theme-bg/50',
+          isDragging && 'shadow-lg rounded',
         )}
         onClick={onActivate}
         onMouseDown={handleMouseDown}
@@ -152,7 +188,7 @@ function TabItem({ tab, isActive, onActivate, onClose, onTogglePin }: TabItemPro
 
 export function IdeEditorTabs() {
   const tabs = useIdeTabs();
-  const { activeTabId, setActiveTab, closeTab, saveFile, togglePinTab } = useIdeStore();
+  const { activeTabId, setActiveTab, closeTab, saveFile, togglePinTab, reorderTabs } = useIdeStore();
   
   // 保存确认对话框状态
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -164,6 +200,25 @@ export function IdeEditorTabs() {
   
   // 滚动容器 ref
   const scrollRef = useRef<HTMLDivElement>(null);
+  
+  // dnd-kit sensors — distance constraint prevents clicks from triggering drag
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  );
+  
+  // Stable sorted ID list for SortableContext
+  const tabIds = useMemo(() => tabs.map(t => t.id), [tabs]);
+  
+  // Handle drag end — reorder tabs
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = tabs.findIndex(t => t.id === active.id);
+    const newIndex = tabs.findIndex(t => t.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const reordered = arrayMove(tabs.map(t => t.id), oldIndex, newIndex);
+    reorderTabs(reordered);
+  }, [tabs, reorderTabs]);
   
   // 处理标签关闭
   const handleCloseTab = useCallback(async (tabId: string) => {
@@ -228,22 +283,30 @@ export function IdeEditorTabs() {
   
   return (
     <>
-      <div
-        ref={scrollRef}
-        className="flex items-stretch border-b border-theme-border/50 bg-theme-bg/60 overflow-x-auto scrollbar-none"
-        onWheel={handleWheel}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
       >
-        {tabs.map(tab => (
-          <TabItem
-            key={tab.id}
-            tab={tab}
-            isActive={tab.id === activeTabId}
-            onActivate={() => setActiveTab(tab.id)}
-            onClose={() => handleCloseTab(tab.id)}
-            onTogglePin={() => togglePinTab(tab.id)}
-          />
-        ))}
-      </div>
+        <SortableContext items={tabIds} strategy={horizontalListSortingStrategy}>
+          <div
+            ref={scrollRef}
+            className="flex items-stretch border-b border-theme-border/50 bg-theme-bg/60 overflow-x-auto scrollbar-none"
+            onWheel={handleWheel}
+          >
+            {tabs.map(tab => (
+              <TabItem
+                key={tab.id}
+                tab={tab}
+                isActive={tab.id === activeTabId}
+                onActivate={() => setActiveTab(tab.id)}
+                onClose={() => handleCloseTab(tab.id)}
+                onTogglePin={() => togglePinTab(tab.id)}
+              />
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
       
       {/* 保存确认对话框 */}
       <IdeSaveConfirmDialog
