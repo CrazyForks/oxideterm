@@ -49,6 +49,23 @@ impl IpcConnection {
                 ));
             }
 
+            // Verify socket ownership matches current user (prevent interception)
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::MetadataExt;
+                let metadata = std::fs::metadata(&path)
+                    .map_err(|e| format!("Cannot stat socket: {e}"))?;
+                let socket_uid = metadata.uid();
+                let current_uid = unsafe { libc::getuid() };
+                if socket_uid != current_uid {
+                    return Err(format!(
+                        "Socket ownership mismatch: socket owned by uid {socket_uid}, \
+                         but current user is uid {current_uid}. \
+                         This may indicate a security issue."
+                    ));
+                }
+            }
+
             let stream = std::os::unix::net::UnixStream::connect(&path)
                 .map_err(|e| format!("Failed to connect to OxideTerm: {e}"))?;
             stream
@@ -166,5 +183,67 @@ impl IpcConnection {
                 .map_err(|e| format!("Read error (is OxideTerm running?): {e}"))?;
         }
         Ok(line)
+    }
+
+    /// Send a JSON-RPC request and read streaming notifications.
+    ///
+    /// The server may send notifications (lines without `id` but with `method`)
+    /// before the final response (line with matching `id`). Each notification
+    /// with method `stream_chunk` has `params.text` which is passed to `on_chunk`.
+    pub fn call_streaming<F>(
+        &mut self,
+        method: &str,
+        params: serde_json::Value,
+        mut on_chunk: F,
+    ) -> Result<serde_json::Value, String>
+    where
+        F: FnMut(&str),
+    {
+        let id = REQUEST_ID.fetch_add(1, Ordering::Relaxed);
+        let req = protocol::Request::new(id, method, params);
+
+        let mut buf = serde_json::to_vec(&req).map_err(|e| format!("Serialize error: {e}"))?;
+        buf.push(b'\n');
+        self.write_all(&buf)?;
+        self.flush()?;
+
+        // Read lines until we get a response with our id
+        loop {
+            let line = self.read_line()?;
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            // Try to parse as a JSON object
+            let obj: serde_json::Value =
+                serde_json::from_str(trimmed).map_err(|e| format!("Invalid response: {e}"))?;
+
+            // Check if it's a notification (has "method" but no "id")
+            if obj.get("method").is_some() && obj.get("id").is_none() {
+                let method_name = obj.get("method").and_then(|v| v.as_str()).unwrap_or("");
+                if method_name == "stream_chunk" {
+                    if let Some(text) = obj
+                        .get("params")
+                        .and_then(|p| p.get("text"))
+                        .and_then(|t| t.as_str())
+                    {
+                        on_chunk(text);
+                    }
+                }
+                // Other notifications are silently ignored
+                continue;
+            }
+
+            // It's a response — parse it
+            let resp: protocol::Response =
+                serde_json::from_str(trimmed).map_err(|e| format!("Invalid response: {e}"))?;
+
+            if let Some(err) = resp.error {
+                return Err(format!("[{}] {}", err.code, err.message));
+            }
+
+            return resp.result.ok_or_else(|| "Empty response".to_string());
+        }
     }
 }

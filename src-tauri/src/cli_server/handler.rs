@@ -89,9 +89,17 @@ pub async fn handle_client(stream: IpcStream, app: AppHandle) {
         };
 
         let id = req.id;
-        let resp = match super::methods::dispatch(&req.method, req.params, &app).await {
-            Ok(value) => Response::ok(id, value),
-            Err((code, msg)) => Response::err(id, code, msg),
+        let resp = if req.method == "ask" {
+            // Streaming method: pass writer so method can send notifications
+            match super::methods::dispatch_streaming(req.params, &app, &mut writer).await {
+                Ok(value) => Response::ok(id, value),
+                Err((code, msg)) => Response::err(id, code, msg),
+            }
+        } else {
+            match super::methods::dispatch(&req.method, req.params, &app).await {
+                Ok(value) => Response::ok(id, value),
+                Err((code, msg)) => Response::err(id, code, msg),
+            }
         };
 
         if write_response(&mut writer, &resp).await.is_err() {
@@ -106,6 +114,23 @@ async fn write_response<W: AsyncWriteExt + Unpin>(
     resp: &Response,
 ) -> Result<(), std::io::Error> {
     let mut buf = serde_json::to_vec(resp).unwrap_or_default();
+    buf.push(b'\n');
+    writer.write_all(&buf).await?;
+    writer.flush().await?;
+    Ok(())
+}
+
+/// Write a JSON-RPC notification (no `id`) for streaming responses.
+pub async fn write_notification<W: AsyncWriteExt + Unpin>(
+    writer: &mut W,
+    method: &str,
+    params: serde_json::Value,
+) -> Result<(), std::io::Error> {
+    let notif = protocol::Notification {
+        method: method.to_string(),
+        params,
+    };
+    let mut buf = serde_json::to_vec(&notif).unwrap_or_default();
     buf.push(b'\n');
     writer.write_all(&buf).await?;
     writer.flush().await?;

@@ -7,6 +7,7 @@
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tauri::Manager;
+use tokio::io::AsyncWriteExt;
 
 use super::protocol;
 use crate::bridge::BridgeManager;
@@ -32,6 +33,13 @@ pub async fn dispatch(
         "health" => health(app, params).await,
         "disconnect" => disconnect(app, params).await,
         "ping" => Ok(json!({ "pong": true })),
+        "config_list" => config_list(app).await,
+        "config_get" => config_get(app, params).await,
+        "create_forward" => create_forward(app, params).await,
+        "delete_forward" => delete_forward(app, params).await,
+        "connect" => connect(app, params).await,
+        "open_tab" => open_tab(app, params).await,
+        "focus_tab" => focus_tab(app, params).await,
         _ => Err((
             protocol::ERR_METHOD_NOT_FOUND,
             format!("Method not found: {method}"),
@@ -335,4 +343,871 @@ async fn disconnect(app: &tauri::AppHandle, params: Value) -> Result<Value, (i32
         "success": true,
         "session_id": session_id,
     }))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Phase D: Config Query
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// List connection groups with counts.
+async fn config_list(app: &tauri::AppHandle) -> Result<Value, (i32, String)> {
+    let config_state = app
+        .try_state::<Arc<ConfigState>>()
+        .ok_or((protocol::ERR_INTERNAL, "Config not initialized".to_string()))?;
+
+    let config = config_state.inner().get_config_snapshot();
+
+    let mut groups: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+    for conn in &config.connections {
+        let group_name = conn.group.as_deref().unwrap_or("(ungrouped)").to_string();
+        *groups.entry(group_name).or_insert(0) += 1;
+    }
+
+    let groups_json: Vec<Value> = groups
+        .iter()
+        .map(|(name, count)| json!({ "name": name, "count": count }))
+        .collect();
+
+    Ok(json!({
+        "total_connections": config.connections.len(),
+        "groups": groups_json,
+    }))
+}
+
+/// Get details of a connection by name (no password/key content exposed).
+async fn config_get(app: &tauri::AppHandle, params: Value) -> Result<Value, (i32, String)> {
+    let name = params
+        .get("name")
+        .and_then(|v| v.as_str())
+        .ok_or((
+            protocol::ERR_INVALID_PARAMS,
+            "Missing required parameter: name".to_string(),
+        ))?;
+
+    let config_state = app
+        .try_state::<Arc<ConfigState>>()
+        .ok_or((protocol::ERR_INTERNAL, "Config not initialized".to_string()))?;
+
+    let config = config_state.inner().get_config_snapshot();
+    let conn = config
+        .connections
+        .iter()
+        .find(|c| c.name.eq_ignore_ascii_case(name) || c.id == name)
+        .ok_or((
+            protocol::ERR_INVALID_PARAMS,
+            format!("Connection not found: {name}"),
+        ))?;
+
+    let (auth_type, key_path) = match &conn.auth {
+        crate::config::SavedAuth::Password { .. } => ("password", None),
+        crate::config::SavedAuth::Key { key_path, .. } => ("key", Some(key_path.as_str())),
+        crate::config::SavedAuth::Certificate { key_path, .. } => {
+            ("certificate", Some(key_path.as_str()))
+        }
+        crate::config::SavedAuth::Agent => ("agent", None),
+    };
+
+    Ok(json!({
+        "id": conn.id,
+        "name": conn.name,
+        "host": conn.host,
+        "port": conn.port,
+        "username": conn.username,
+        "auth_type": auth_type,
+        "key_path": key_path,
+        "group": conn.group,
+        "tags": conn.tags,
+        "color": conn.color,
+        "options": {
+            "keep_alive_interval": conn.options.keep_alive_interval,
+            "compression": conn.options.compression,
+            "jump_host": conn.options.jump_host,
+            "term_type": conn.options.term_type,
+        },
+        "proxy_chain": conn.proxy_chain.iter().map(|p| json!({
+            "host": p.host,
+            "port": p.port,
+            "username": p.username,
+        })).collect::<Vec<_>>(),
+        "created_at": conn.created_at.to_rfc3339(),
+        "last_used_at": conn.last_used_at.map(|t| t.to_rfc3339()),
+    }))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Phase B: Port Forwarding Management
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Create a port forward on an active session.
+async fn create_forward(app: &tauri::AppHandle, params: Value) -> Result<Value, (i32, String)> {
+    let session_id = params
+        .get("session_id")
+        .and_then(|v| v.as_str())
+        .ok_or((
+            protocol::ERR_INVALID_PARAMS,
+            "Missing required parameter: session_id".to_string(),
+        ))?;
+
+    let forward_type_str = params
+        .get("forward_type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("local");
+
+    let bind_address = params
+        .get("bind_address")
+        .and_then(|v| v.as_str())
+        .unwrap_or("127.0.0.1")
+        .to_string();
+
+    let bind_port = params
+        .get("bind_port")
+        .and_then(|v| v.as_u64())
+        .ok_or((
+            protocol::ERR_INVALID_PARAMS,
+            "Missing required parameter: bind_port".to_string(),
+        ))? as u16;
+
+    let target_host = params
+        .get("target_host")
+        .and_then(|v| v.as_str())
+        .unwrap_or("localhost")
+        .to_string();
+
+    let target_port = params
+        .get("target_port")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u16;
+
+    let description = params
+        .get("description")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    use crate::forwarding::{ForwardRule, ForwardStatus, ForwardType};
+
+    let fwd_type = match forward_type_str {
+        "local" => ForwardType::Local,
+        "remote" => ForwardType::Remote,
+        "dynamic" => ForwardType::Dynamic,
+        other => {
+            return Err((
+                protocol::ERR_INVALID_PARAMS,
+                format!("Unknown forward type: {other}"),
+            ));
+        }
+    };
+
+    // For non-dynamic forwards, target_port is required
+    if fwd_type != ForwardType::Dynamic && target_port == 0 {
+        return Err((
+            protocol::ERR_INVALID_PARAMS,
+            "Missing required parameter: target_port".to_string(),
+        ));
+    }
+
+    let forwarding_registry = app
+        .try_state::<Arc<ForwardingRegistry>>()
+        .ok_or((
+            protocol::ERR_INTERNAL,
+            "Forwarding registry not initialized".to_string(),
+        ))?;
+
+    let mgr = forwarding_registry
+        .get(session_id)
+        .await
+        .ok_or((
+            protocol::ERR_NOT_CONNECTED,
+            format!("No forwarding manager for session: {session_id}"),
+        ))?;
+
+    let rule = ForwardRule {
+        id: uuid::Uuid::new_v4().to_string(),
+        forward_type: fwd_type,
+        bind_address,
+        bind_port,
+        target_host,
+        target_port,
+        status: ForwardStatus::Starting,
+        description,
+    };
+
+    match mgr.create_forward(rule).await {
+        Ok(created) => {
+            let forward_id = created.id.clone();
+            tracing::info!("CLI: Port forward created: {forward_id}");
+
+            // Update ConnectionRegistry
+            if let Some(conn_registry) = app.try_state::<Arc<SshConnectionRegistry>>() {
+                if let Err(e) = conn_registry.add_forward(session_id, forward_id).await {
+                    tracing::warn!("Failed to update forward state in ConnectionRegistry: {e}");
+                }
+            }
+
+            Ok(json!({
+                "success": true,
+                "forward": {
+                    "id": created.id,
+                    "forward_type": format!("{:?}", created.forward_type).to_lowercase(),
+                    "bind_address": created.bind_address,
+                    "bind_port": created.bind_port,
+                    "target_host": created.target_host,
+                    "target_port": created.target_port,
+                    "status": format!("{:?}", created.status).to_lowercase(),
+                    "description": created.description,
+                },
+            }))
+        }
+        Err(e) => Ok(json!({
+            "success": false,
+            "error": e.to_string(),
+        })),
+    }
+}
+
+/// Delete a port forward from an active session.
+async fn delete_forward(app: &tauri::AppHandle, params: Value) -> Result<Value, (i32, String)> {
+    let session_id = params
+        .get("session_id")
+        .and_then(|v| v.as_str())
+        .ok_or((
+            protocol::ERR_INVALID_PARAMS,
+            "Missing required parameter: session_id".to_string(),
+        ))?;
+
+    let forward_id = params
+        .get("forward_id")
+        .and_then(|v| v.as_str())
+        .ok_or((
+            protocol::ERR_INVALID_PARAMS,
+            "Missing required parameter: forward_id".to_string(),
+        ))?;
+
+    let forwarding_registry = app
+        .try_state::<Arc<ForwardingRegistry>>()
+        .ok_or((
+            protocol::ERR_INTERNAL,
+            "Forwarding registry not initialized".to_string(),
+        ))?;
+
+    let mgr = forwarding_registry
+        .get(session_id)
+        .await
+        .ok_or((
+            protocol::ERR_NOT_CONNECTED,
+            format!("No forwarding manager for session: {session_id}"),
+        ))?;
+
+    match mgr.delete_forward(forward_id).await {
+        Ok(()) => {
+            tracing::info!("CLI: Port forward deleted: {forward_id}");
+            Ok(json!({
+                "success": true,
+                "forward_id": forward_id,
+            }))
+        }
+        Err(e) => Ok(json!({
+            "success": false,
+            "error": e.to_string(),
+        })),
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Phase A: Connection Control
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Trigger the GUI to connect to a saved connection.
+async fn connect(app: &tauri::AppHandle, params: Value) -> Result<Value, (i32, String)> {
+    let target = params
+        .get("target")
+        .and_then(|v| v.as_str())
+        .ok_or((
+            protocol::ERR_INVALID_PARAMS,
+            "Missing required parameter: target".to_string(),
+        ))?;
+
+    // Resolve target to a saved connection
+    let config_state = app
+        .try_state::<Arc<ConfigState>>()
+        .ok_or((protocol::ERR_INTERNAL, "Config not initialized".to_string()))?;
+
+    let config = config_state.inner().get_config_snapshot();
+    let conn = config
+        .connections
+        .iter()
+        .find(|c| c.name.eq_ignore_ascii_case(target) || c.id == target || c.host == target)
+        .ok_or((
+            protocol::ERR_INVALID_PARAMS,
+            format!("Connection not found: {target}"),
+        ))?;
+
+    // Emit event for frontend to handle
+    use tauri::Emitter;
+    app.emit("cli:connect", json!({
+        "connection_id": conn.id,
+        "name": conn.name,
+        "host": conn.host,
+    }))
+    .map_err(|e| (protocol::ERR_INTERNAL, format!("Failed to emit event: {e}")))?;
+
+    Ok(json!({
+        "success": true,
+        "connection_id": conn.id,
+        "name": conn.name,
+    }))
+}
+
+/// Open a new local terminal tab in the GUI.
+async fn open_tab(app: &tauri::AppHandle, params: Value) -> Result<Value, (i32, String)> {
+    let path = params
+        .get("path")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    use tauri::Emitter;
+    app.emit("cli:open-tab", json!({ "path": path }))
+        .map_err(|e| (protocol::ERR_INTERNAL, format!("Failed to emit event: {e}")))?;
+
+    Ok(json!({ "success": true }))
+}
+
+/// Focus an existing session tab in the GUI.
+async fn focus_tab(app: &tauri::AppHandle, params: Value) -> Result<Value, (i32, String)> {
+    let target = params
+        .get("target")
+        .and_then(|v| v.as_str())
+        .ok_or((
+            protocol::ERR_INVALID_PARAMS,
+            "Missing required parameter: target".to_string(),
+        ))?;
+
+    // Resolve: try as session ID, then by name
+    let registry = app
+        .try_state::<Arc<SessionRegistry>>()
+        .ok_or((
+            protocol::ERR_INTERNAL,
+            "Session registry not initialized".to_string(),
+        ))?;
+
+    let sessions = registry.list();
+    let session = sessions
+        .iter()
+        .find(|s| s.id == target || s.name == target)
+        .ok_or((
+            protocol::ERR_INVALID_PARAMS,
+            format!("Session not found: {target}"),
+        ))?;
+
+    use tauri::Emitter;
+    app.emit("cli:focus-tab", json!({ "session_id": session.id }))
+        .map_err(|e| (protocol::ERR_INTERNAL, format!("Failed to emit event: {e}")))?;
+
+    // Bring window to front
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_focus();
+    }
+
+    Ok(json!({
+        "success": true,
+        "session_id": session.id,
+    }))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Phase C: AI Pipeline (streaming)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Built-in provider defaults (baseUrl, defaultModel, keychain ID).
+struct BuiltinProvider {
+    keychain_id: &'static str,
+    provider_type: &'static str,
+    base_url: &'static str,
+    default_model: &'static str,
+}
+
+const BUILTIN_PROVIDERS: &[BuiltinProvider] = &[
+    BuiltinProvider {
+        keychain_id: "builtin-openai",
+        provider_type: "openai",
+        base_url: "https://api.openai.com/v1",
+        default_model: "gpt-4o-mini",
+    },
+    BuiltinProvider {
+        keychain_id: "builtin-anthropic",
+        provider_type: "anthropic",
+        base_url: "https://api.anthropic.com",
+        default_model: "claude-sonnet-4-20250514",
+    },
+    BuiltinProvider {
+        keychain_id: "builtin-gemini",
+        provider_type: "gemini",
+        base_url: "https://generativelanguage.googleapis.com/v1beta",
+        default_model: "gemini-2.0-flash",
+    },
+    BuiltinProvider {
+        keychain_id: "builtin-ollama",
+        provider_type: "ollama",
+        base_url: "http://localhost:11434",
+        default_model: "llama3.2",
+    },
+];
+
+/// Maximum prompt size (50 KB).
+const MAX_PROMPT_SIZE: usize = 50_000;
+/// Maximum piped context size (500 KB).
+const MAX_CONTEXT_SIZE: usize = 500_000;
+/// Maximum terminal buffer lines for AI context.
+const MAX_TERMINAL_BUFFER_LINES: usize = 2_000;
+/// HTTP request timeout for AI API calls.
+const AI_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+/// Maximum response tokens for Anthropic API.
+const ANTHROPIC_MAX_TOKENS: u32 = 4096;
+
+/// Dispatch the `ask` RPC method with streaming support.
+///
+/// Writes `stream_chunk` notifications to the writer as AI tokens arrive,
+/// then returns the final result.
+pub async fn dispatch_streaming<W: AsyncWriteExt + Unpin>(
+    params: Value,
+    app: &tauri::AppHandle,
+    writer: &mut W,
+) -> Result<Value, (i32, String)> {
+    ask(app, params, writer).await
+}
+
+/// AI ask implementation with streaming.
+async fn ask<W: AsyncWriteExt + Unpin>(
+    app: &tauri::AppHandle,
+    params: Value,
+    writer: &mut W,
+) -> Result<Value, (i32, String)> {
+    let prompt = params
+        .get("prompt")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let context = params
+        .get("context")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    // Validate input sizes
+    if prompt.len() > MAX_PROMPT_SIZE {
+        return Err((
+            protocol::ERR_INVALID_PARAMS,
+            format!("Prompt exceeds maximum size ({MAX_PROMPT_SIZE} bytes)"),
+        ));
+    }
+    if let Some(ref ctx) = context {
+        if ctx.len() > MAX_CONTEXT_SIZE {
+            return Err((
+                protocol::ERR_INVALID_PARAMS,
+                format!("Context exceeds maximum size ({MAX_CONTEXT_SIZE} bytes)"),
+            ));
+        }
+    }
+
+    let session_id = params
+        .get("session_id")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    let model_override = params
+        .get("model")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    let provider_override = params
+        .get("provider")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    let stream = params
+        .get("stream")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+
+    let exec_mode = params
+        .get("exec_mode")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    // Resolve provider
+    let config_state = app
+        .try_state::<Arc<ConfigState>>()
+        .ok_or((protocol::ERR_INTERNAL, "Config not initialized".to_string()))?;
+
+    if prompt.is_empty() && context.is_none() {
+        return Err((
+            protocol::ERR_INVALID_PARAMS,
+            "Prompt cannot be empty".to_string(),
+        ));
+    }
+
+    let (provider_type, base_url, api_key, model) =
+        resolve_ai_provider(app, &config_state, provider_override.as_deref(), model_override.as_deref())
+            .await?;
+
+    // Optionally get terminal buffer as context
+    let terminal_context = if let Some(sid) = &session_id {
+        get_terminal_buffer(app, sid).await.ok()
+    } else {
+        None
+    };
+
+    // Build system prompt
+    let system_prompt = if exec_mode {
+        "You are a code generator. Output only executable code or commands. No explanations, no markdown fences, no comments unless part of the code."
+            .to_string()
+    } else {
+        "You are OxideSens, an expert terminal & DevOps assistant in OxideTerm. Be concise and helpful. When given terminal output or logs, analyze them and provide actionable insights."
+            .to_string()
+    };
+
+    // Build user message
+    let mut user_message = String::new();
+    if let Some(ctx) = &context {
+        user_message.push_str("<context>\n");
+        user_message.push_str(ctx);
+        user_message.push_str("\n</context>\n\n");
+    }
+    if let Some(tc) = &terminal_context {
+        user_message.push_str("<terminal_buffer>\n");
+        user_message.push_str(tc);
+        user_message.push_str("\n</terminal_buffer>\n\n");
+    }
+    user_message.push_str(&prompt);
+
+    // Make AI API call
+    let client = reqwest::Client::builder()
+        .timeout(AI_REQUEST_TIMEOUT)
+        .build()
+        .map_err(|e| (protocol::ERR_INTERNAL, format!("Failed to create HTTP client: {e}")))?;
+
+    match provider_type.as_str() {
+        "anthropic" => {
+            call_anthropic(
+                &client, &base_url, &api_key, &model, &system_prompt, &user_message, stream, writer,
+            )
+            .await
+        }
+        _ => {
+            // OpenAI-compatible (openai, ollama, openai_compatible, gemini via compatible endpoint)
+            call_openai_compatible(
+                &client, &base_url, &api_key, &model, &system_prompt, &user_message, stream, writer,
+            )
+            .await
+        }
+    }
+}
+
+/// Resolve AI provider from CLI params or auto-detect from keychain.
+async fn resolve_ai_provider(
+    app: &tauri::AppHandle,
+    config_state: &Arc<ConfigState>,
+    provider_override: Option<&str>,
+    model_override: Option<&str>,
+) -> Result<(String, String, String, String), (i32, String)> {
+    if let Some(provider_type) = provider_override {
+        // Find matching builtin
+        let builtin = BUILTIN_PROVIDERS
+            .iter()
+            .find(|p| p.provider_type == provider_type)
+            .ok_or((
+                protocol::ERR_INVALID_PARAMS,
+                format!("Unknown provider: {provider_type}. Available: openai, anthropic, gemini, ollama"),
+            ))?;
+
+        let api_key = get_provider_api_key(app, config_state, builtin.keychain_id).await?;
+        let model = model_override
+            .unwrap_or(builtin.default_model)
+            .to_string();
+
+        return Ok((
+            provider_type.to_string(),
+            builtin.base_url.to_string(),
+            api_key,
+            model,
+        ));
+    }
+
+    // Auto-detect: try each builtin in priority order
+    for builtin in BUILTIN_PROVIDERS {
+        if let Ok(key) = get_provider_api_key(app, config_state, builtin.keychain_id).await {
+            let model = model_override
+                .unwrap_or(builtin.default_model)
+                .to_string();
+            return Ok((
+                builtin.provider_type.to_string(),
+                builtin.base_url.to_string(),
+                key,
+                model,
+            ));
+        }
+    }
+
+    Err((
+        protocol::ERR_INTERNAL,
+        "No AI provider API key found. Configure one in OxideTerm Settings → AI, or use --provider".to_string(),
+    ))
+}
+
+/// Get API key from keychain for a provider.
+async fn get_provider_api_key(
+    _app: &tauri::AppHandle,
+    config_state: &Arc<ConfigState>,
+    provider_id: &str,
+) -> Result<String, (i32, String)> {
+    // Check in-memory cache first
+    {
+        let cache = config_state.api_key_cache.read();
+        if let Some(key) = cache.get(provider_id) {
+            return Ok(key.clone());
+        }
+    }
+
+    // Try keychain
+    match config_state.ai_keychain.get(provider_id) {
+        Ok(key) => {
+            config_state.api_key_cache.write().insert(provider_id.to_string(), key.clone());
+            Ok(key)
+        }
+        Err(_) => Err((
+            protocol::ERR_INTERNAL,
+            format!("No API key for provider: {provider_id}"),
+        )),
+    }
+}
+
+/// Get terminal buffer lines as a string.
+async fn get_terminal_buffer(
+    app: &tauri::AppHandle,
+    session_id: &str,
+) -> Result<String, (i32, String)> {
+    let registry = app
+        .try_state::<Arc<SessionRegistry>>()
+        .ok_or((
+            protocol::ERR_INTERNAL,
+            "Session registry not initialized".to_string(),
+        ))?;
+
+    let scroll_buffer = registry
+        .with_session(session_id, |entry| entry.scroll_buffer.clone())
+        .ok_or((
+            protocol::ERR_INVALID_PARAMS,
+            format!("No buffer for session: {session_id}"),
+        ))?;
+
+    // Get last N lines for context (reasonable size for AI prompt)
+    let (lines, _total) = scroll_buffer.get_capped(MAX_TERMINAL_BUFFER_LINES).await;
+    let text: Vec<String> = lines.iter().map(|l| l.text.clone()).collect();
+    Ok(text.join("\n"))
+}
+
+/// Call OpenAI-compatible API (works for OpenAI, Ollama, openai_compatible).
+async fn call_openai_compatible<W: AsyncWriteExt + Unpin>(
+    client: &reqwest::Client,
+    base_url: &str,
+    api_key: &str,
+    model: &str,
+    system_prompt: &str,
+    user_message: &str,
+    stream: bool,
+    writer: &mut W,
+) -> Result<Value, (i32, String)> {
+    let clean_url = base_url.trim_end_matches('/');
+    let url = format!("{clean_url}/chat/completions");
+
+    if api_key.is_empty() && !base_url.contains("localhost") {
+        return Err((protocol::ERR_INTERNAL, "API key is empty".to_string()));
+    }
+
+    let body = json!({
+        "model": model,
+        "messages": [
+            { "role": "system", "content": system_prompt },
+            { "role": "user", "content": user_message },
+        ],
+        "stream": stream,
+    });
+
+    let mut request = client
+        .post(&url)
+        .header("Content-Type", "application/json");
+
+    if !api_key.is_empty() {
+        request = request.header("Authorization", format!("Bearer {api_key}"));
+    }
+
+    let response = request
+        .body(body.to_string())
+        .send()
+        .await
+        .map_err(|e| (protocol::ERR_INTERNAL, format!("AI request failed: {e}")))?;
+
+    let status = response.status().as_u16();
+    if status >= 400 {
+        let body_text = response.text().await.unwrap_or_default();
+        return Err((protocol::ERR_INTERNAL, format!("AI API error ({status}): {body_text}")));
+    }
+
+    if !stream {
+        let body_text = response.text().await.map_err(|e| (protocol::ERR_INTERNAL, e.to_string()))?;
+        let parsed: Value = serde_json::from_str(&body_text)
+            .map_err(|e| (protocol::ERR_INTERNAL, format!("Invalid AI response: {e}")))?;
+        let text = parsed
+            .pointer("/choices/0/message/content")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        return Ok(json!({ "text": text, "model": model }));
+    }
+
+    // Streaming: read SSE lines
+    let mut full_text = String::new();
+    let mut byte_stream = response.bytes_stream();
+    let mut line_buf = String::new();
+
+    use futures_util::StreamExt;
+    while let Some(chunk) = byte_stream.next().await {
+        let chunk = chunk.map_err(|e| (protocol::ERR_INTERNAL, format!("Stream error: {e}")))?;
+        let text = String::from_utf8_lossy(&chunk);
+        line_buf.push_str(&text);
+
+        while let Some(newline_pos) = line_buf.find('\n') {
+            let line = line_buf[..newline_pos].trim().to_string();
+            line_buf = line_buf[newline_pos + 1..].to_string();
+
+            if line.is_empty() || line == "data: [DONE]" {
+                continue;
+            }
+
+            if let Some(data) = line.strip_prefix("data: ") {
+                if let Ok(parsed) = serde_json::from_str::<Value>(data) {
+                    if let Some(content) = parsed
+                        .pointer("/choices/0/delta/content")
+                        .and_then(|v| v.as_str())
+                    {
+                        if !content.is_empty() {
+                            full_text.push_str(content);
+                            let _ = super::handler::write_notification(
+                                writer,
+                                "stream_chunk",
+                                json!({ "text": content }),
+                            )
+                            .await;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(json!({ "text": full_text, "model": model, "done": true }))
+}
+
+/// Call Anthropic Messages API.
+async fn call_anthropic<W: AsyncWriteExt + Unpin>(
+    client: &reqwest::Client,
+    base_url: &str,
+    api_key: &str,
+    model: &str,
+    system_prompt: &str,
+    user_message: &str,
+    stream: bool,
+    writer: &mut W,
+) -> Result<Value, (i32, String)> {
+    let clean_url = base_url.trim_end_matches('/');
+    let url = format!("{clean_url}/v1/messages");
+
+    if api_key.is_empty() {
+        return Err((protocol::ERR_INTERNAL, "Anthropic API key is empty".to_string()));
+    }
+
+    let body = json!({
+        "model": model,
+        "max_tokens": ANTHROPIC_MAX_TOKENS,
+        "system": system_prompt,
+        "messages": [
+            { "role": "user", "content": user_message },
+        ],
+        "stream": stream,
+    });
+
+    let response = client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .header("x-api-key", api_key)
+        .header("anthropic-version", "2023-06-01")
+        .body(body.to_string())
+        .send()
+        .await
+        .map_err(|e| (protocol::ERR_INTERNAL, format!("AI request failed: {e}")))?;
+
+    let status = response.status().as_u16();
+    if status >= 400 {
+        let body_text = response.text().await.unwrap_or_default();
+        return Err((protocol::ERR_INTERNAL, format!("AI API error ({status}): {body_text}")));
+    }
+
+    if !stream {
+        let body_text = response.text().await.map_err(|e| (protocol::ERR_INTERNAL, e.to_string()))?;
+        let parsed: Value = serde_json::from_str(&body_text)
+            .map_err(|e| (protocol::ERR_INTERNAL, format!("Invalid AI response: {e}")))?;
+        let text = parsed
+            .get("content")
+            .and_then(|c| c.as_array())
+            .and_then(|arr| arr.first())
+            .and_then(|block| block.get("text"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        return Ok(json!({ "text": text, "model": model }));
+    }
+
+    // Streaming: read SSE lines
+    let mut full_text = String::new();
+    let mut byte_stream = response.bytes_stream();
+    let mut line_buf = String::new();
+
+    use futures_util::StreamExt;
+    while let Some(chunk) = byte_stream.next().await {
+        let chunk = chunk.map_err(|e| (protocol::ERR_INTERNAL, format!("Stream error: {e}")))?;
+        let text = String::from_utf8_lossy(&chunk);
+        line_buf.push_str(&text);
+
+        while let Some(newline_pos) = line_buf.find('\n') {
+            let line = line_buf[..newline_pos].trim().to_string();
+            line_buf = line_buf[newline_pos + 1..].to_string();
+
+            if line.is_empty() {
+                continue;
+            }
+
+            if let Some(data) = line.strip_prefix("data: ") {
+                if let Ok(parsed) = serde_json::from_str::<Value>(data) {
+                    // Anthropic content_block_delta
+                    if parsed.get("type").and_then(|v| v.as_str()) == Some("content_block_delta") {
+                        if let Some(text_delta) = parsed
+                            .pointer("/delta/text")
+                            .and_then(|v| v.as_str())
+                        {
+                            if !text_delta.is_empty() {
+                                full_text.push_str(text_delta);
+                                let _ = super::handler::write_notification(
+                                    writer,
+                                    "stream_chunk",
+                                    json!({ "text": text_delta }),
+                                )
+                                .await;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(json!({ "text": full_text, "model": model, "done": true }))
 }

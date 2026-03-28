@@ -56,6 +56,78 @@ enum Commands {
         target: String,
     },
 
+    /// Manage port forwarding
+    Forward {
+        #[command(subcommand)]
+        action: ForwardAction,
+    },
+
+    /// Query saved configuration
+    Config {
+        #[command(subcommand)]
+        action: ConfigAction,
+    },
+
+    /// Ask AI a question (pipe context via stdin)
+    Ask {
+        /// Prompt text (remaining args joined)
+        #[arg(trailing_var_arg = true)]
+        prompt: Vec<String>,
+
+        /// Attach terminal buffer from a session as context
+        #[arg(short, long)]
+        session: Option<String>,
+
+        /// AI model to use (overrides default)
+        #[arg(short, long)]
+        model: Option<String>,
+
+        /// Provider type: openai, anthropic, gemini, ollama
+        #[arg(short, long)]
+        provider: Option<String>,
+
+        /// Disable streaming (wait for full response)
+        #[arg(long)]
+        no_stream: bool,
+    },
+
+    /// Generate code/commands with AI (code-only output)
+    Exec {
+        /// Prompt text (remaining args joined)
+        #[arg(trailing_var_arg = true)]
+        prompt: Vec<String>,
+
+        /// Attach terminal buffer from a session as context
+        #[arg(short, long)]
+        session: Option<String>,
+
+        /// AI model to use
+        #[arg(short, long)]
+        model: Option<String>,
+
+        /// Provider type
+        #[arg(short, long)]
+        provider: Option<String>,
+    },
+
+    /// Connect to a saved connection (opens in GUI)
+    Connect {
+        /// Connection name, host, or ID
+        target: String,
+    },
+
+    /// Open a new local terminal tab
+    Open {
+        /// Working directory (default: current directory)
+        path: Option<String>,
+    },
+
+    /// Focus an existing session tab
+    Focus {
+        /// Session ID or name
+        target: String,
+    },
+
     /// Ping the GUI (connectivity check)
     Ping,
 
@@ -79,6 +151,49 @@ enum ListTarget {
     Forwards {
         /// Session ID (omit to show all sessions)
         session_id: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum ForwardAction {
+    /// Add a port forward to a session
+    Add {
+        /// Forward spec: [bind_addr:]bind_port:target_host:target_port
+        spec: String,
+
+        /// Session ID or name
+        #[arg(short, long)]
+        session: String,
+
+        /// Forward type: local, remote, dynamic
+        #[arg(short = 't', long, default_value = "local")]
+        r#type: String,
+
+        /// Optional description
+        #[arg(short, long)]
+        description: Option<String>,
+    },
+
+    /// Remove a port forward
+    Remove {
+        /// Forward ID
+        forward_id: String,
+
+        /// Session ID or name
+        #[arg(short, long)]
+        session: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum ConfigAction {
+    /// List connection groups
+    List,
+
+    /// Show connection details
+    Get {
+        /// Connection name or ID
+        name: String,
     },
 }
 
@@ -155,6 +270,168 @@ fn run(cli: &Cli, out: &output::OutputMode) -> Result<(), String> {
             let resp = conn.call("disconnect", serde_json::json!({ "target": target }))?;
             out.print_disconnect(&resp);
         }
+        Commands::Forward { action } => match action {
+            ForwardAction::Add {
+                spec,
+                session,
+                r#type,
+                description,
+            } => {
+                let (bind_address, bind_port, target_host, target_port) =
+                    parse_forward_spec(spec, r#type)?;
+
+                // Resolve session name → ID if needed
+                let session_id = resolve_session_id(&mut conn, session)?;
+
+                let mut params = serde_json::json!({
+                    "session_id": session_id,
+                    "forward_type": r#type,
+                    "bind_address": bind_address,
+                    "bind_port": bind_port,
+                    "target_host": target_host,
+                    "target_port": target_port,
+                });
+                if let Some(desc) = description {
+                    params["description"] = serde_json::json!(desc);
+                }
+                let resp = conn.call("create_forward", params)?;
+                out.print_forward_result(&resp);
+            }
+            ForwardAction::Remove {
+                forward_id,
+                session,
+            } => {
+                let session_id = resolve_session_id(&mut conn, session)?;
+                let resp = conn.call(
+                    "delete_forward",
+                    serde_json::json!({
+                        "session_id": session_id,
+                        "forward_id": forward_id,
+                    }),
+                )?;
+                out.print_forward_result(&resp);
+            }
+        },
+        Commands::Config { action } => match action {
+            ConfigAction::List => {
+                let resp = conn.call("config_list", serde_json::json!({}))?;
+                out.print_config_list(&resp);
+            }
+            ConfigAction::Get { name } => {
+                let resp = conn.call("config_get", serde_json::json!({ "name": name }))?;
+                out.print_config_get(&resp);
+            }
+        },
+        Commands::Ask {
+            prompt,
+            session,
+            model,
+            provider,
+            no_stream,
+        } => {
+            let prompt_text = prompt.join(" ");
+            if prompt_text.is_empty() && is_terminal_stdin() {
+                return Err("No prompt provided. Usage: oxt ask \"your question\"".to_string());
+            }
+
+            // Read stdin if piped
+            let context = if !is_terminal_stdin() {
+                Some(read_stdin()?)
+            } else {
+                None
+            };
+
+            let mut params = serde_json::json!({
+                "prompt": if prompt_text.is_empty() { "Analyze the following".to_string() } else { prompt_text },
+                "stream": !no_stream,
+            });
+            if let Some(ctx) = &context {
+                params["context"] = serde_json::json!(ctx);
+            }
+            if let Some(s) = session {
+                let sid = resolve_session_id(&mut conn, s)?;
+                params["session_id"] = serde_json::json!(sid);
+            }
+            if let Some(m) = model {
+                params["model"] = serde_json::json!(m);
+            }
+            if let Some(p) = provider {
+                params["provider"] = serde_json::json!(p);
+            }
+
+            if *no_stream {
+                let resp = conn.call("ask", params)?;
+                out.print_ai_response(&resp);
+            } else {
+                conn.call_streaming("ask", params, |text| {
+                    use std::io::Write;
+                    print!("{text}");
+                    let _ = std::io::stdout().flush();
+                })?;
+                // Ensure final newline
+                println!();
+            }
+        }
+        Commands::Exec {
+            prompt,
+            session,
+            model,
+            provider,
+        } => {
+            let prompt_text = prompt.join(" ");
+            if prompt_text.is_empty() && is_terminal_stdin() {
+                return Err("No prompt provided. Usage: oxt exec \"generate a script\"".to_string());
+            }
+
+            let context = if !is_terminal_stdin() {
+                Some(read_stdin()?)
+            } else {
+                None
+            };
+
+            let mut params = serde_json::json!({
+                "prompt": if prompt_text.is_empty() { "Generate code for the following".to_string() } else { prompt_text },
+                "stream": true,
+                "exec_mode": true,
+            });
+            if let Some(ctx) = &context {
+                params["context"] = serde_json::json!(ctx);
+            }
+            if let Some(s) = session {
+                let sid = resolve_session_id(&mut conn, s)?;
+                params["session_id"] = serde_json::json!(sid);
+            }
+            if let Some(m) = model {
+                params["model"] = serde_json::json!(m);
+            }
+            if let Some(p) = provider {
+                params["provider"] = serde_json::json!(p);
+            }
+
+            conn.call_streaming("ask", params, |text| {
+                use std::io::Write;
+                print!("{text}");
+                let _ = std::io::stdout().flush();
+            })?;
+            println!();
+        }
+        Commands::Connect { target } => {
+            let resp = conn.call("connect", serde_json::json!({ "target": target }))?;
+            out.print_connect_result(&resp);
+        }
+        Commands::Open { path } => {
+            let dir = path.clone().unwrap_or_else(|| {
+                std::env::current_dir()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_else(|_| ".".to_string())
+            });
+            let resp = conn.call("open_tab", serde_json::json!({ "path": dir }))?;
+            out.print_json(&resp);
+        }
+        Commands::Focus { target } => {
+            let resp = conn.call("focus_tab", serde_json::json!({ "target": target }))?;
+            out.print_json(&resp);
+        }
         Commands::Ping => {
             let resp = conn.call("ping", serde_json::json!({}))?;
             out.print_json(&resp);
@@ -163,4 +440,83 @@ fn run(cli: &Cli, out: &output::OutputMode) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+/// Parse a forward spec like `8080:localhost:80` or `0.0.0.0:8080:localhost:80`
+/// For dynamic forwards, spec is just `[bind_addr:]bind_port`
+fn parse_forward_spec(
+    spec: &str,
+    fwd_type: &str,
+) -> Result<(String, u16, String, u16), String> {
+    let parts: Vec<&str> = spec.split(':').collect();
+
+    if fwd_type == "dynamic" {
+        // Dynamic: [bind_addr:]bind_port
+        return match parts.len() {
+            1 => {
+                let port: u16 = parts[0].parse().map_err(|_| format!("Invalid port: {}", parts[0]))?;
+                Ok(("127.0.0.1".to_string(), port, String::new(), 0))
+            }
+            2 => {
+                let port: u16 = parts[1].parse().map_err(|_| format!("Invalid port: {}", parts[1]))?;
+                Ok((parts[0].to_string(), port, String::new(), 0))
+            }
+            _ => Err("Dynamic forward spec: [bind_addr:]bind_port".to_string()),
+        };
+    }
+
+    // local/remote: [bind_addr:]bind_port:target_host:target_port
+    match parts.len() {
+        3 => {
+            let bind_port: u16 = parts[0].parse().map_err(|_| format!("Invalid bind port: {}", parts[0]))?;
+            let target_port: u16 = parts[2].parse().map_err(|_| format!("Invalid target port: {}", parts[2]))?;
+            Ok(("127.0.0.1".to_string(), bind_port, parts[1].to_string(), target_port))
+        }
+        4 => {
+            let bind_port: u16 = parts[1].parse().map_err(|_| format!("Invalid bind port: {}", parts[1]))?;
+            let target_port: u16 = parts[3].parse().map_err(|_| format!("Invalid target port: {}", parts[3]))?;
+            Ok((parts[0].to_string(), bind_port, parts[2].to_string(), target_port))
+        }
+        _ => Err("Forward spec: [bind_addr:]bind_port:target_host:target_port".to_string()),
+    }
+}
+
+/// Resolve a session target (name or ID) to a session ID.
+fn resolve_session_id(conn: &mut connect::IpcConnection, target: &str) -> Result<String, String> {
+    let sessions = conn.call("list_sessions", serde_json::json!({}))?;
+    let items = sessions.as_array().ok_or("Invalid session list")?;
+
+    // Try exact ID match
+    if let Some(s) = items.iter().find(|s| s.get("id").and_then(|v| v.as_str()) == Some(target)) {
+        return Ok(s["id"].as_str().unwrap().to_string());
+    }
+    // Try name match
+    if let Some(s) = items.iter().find(|s| s.get("name").and_then(|v| v.as_str()) == Some(target)) {
+        return Ok(s["id"].as_str().unwrap().to_string());
+    }
+    // Try partial ID match
+    if let Some(s) = items.iter().find(|s| {
+        s.get("id").and_then(|v| v.as_str()).map(|id| id.starts_with(target)).unwrap_or(false)
+    }) {
+        return Ok(s["id"].as_str().unwrap().to_string());
+    }
+
+    Err(format!("Session not found: {target}"))
+}
+
+fn is_terminal_stdin() -> bool {
+    use std::io::IsTerminal;
+    std::io::stdin().is_terminal()
+}
+
+fn read_stdin() -> Result<String, String> {
+    use std::io::Read;
+    let mut buf = String::new();
+    // Cap stdin reading at 512KB to prevent excessively large contexts
+    let max_size = 512 * 1024;
+    std::io::stdin()
+        .take(max_size as u64)
+        .read_to_string(&mut buf)
+        .map_err(|e| format!("Failed to read stdin: {e}"))?;
+    Ok(buf)
 }

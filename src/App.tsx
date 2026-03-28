@@ -6,6 +6,7 @@ import { LocalShellLauncher } from './components/local/LocalShellLauncher';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useNetworkStatus } from './hooks/useNetworkStatus';
 import { useConnectionEvents } from './hooks/useConnectionEvents';
+import { useCliEvents } from './hooks/useCliEvents';
 import { useEventLogCapture } from './hooks/useEventLogCapture';
 import { setupTreeStoreSubscriptions, cleanupTreeStoreSubscriptions } from './store/sessionTreeStore';
 import { useLocalTerminalStore } from './store/localTerminalStore';
@@ -33,6 +34,7 @@ function App() {
   // useReconnectEvents 已废弃，由 useConnectionEvents 统一处理连接事件
   useNetworkStatus();
   useConnectionEvents();
+  useCliEvents();
   useEventLogCapture();
   
   // Recording player modal state

@@ -20,12 +20,12 @@ pub struct ConfigState {
     storage: ConfigStorage,
     config: RwLock<ConfigFile>,
     keychain: Keychain,
-    ai_keychain: Keychain,
+    pub(crate) ai_keychain: Keychain,
     /// In-memory cache for AI provider API keys.
     /// Populated after the first successful Touch ID authentication so
     /// subsequent `get_ai_provider_api_key` calls within the same app
     /// session do not re-trigger the biometric prompt.
-    api_key_cache: RwLock<HashMap<String, String>>,
+    pub(crate) api_key_cache: RwLock<HashMap<String, String>>,
 }
 
 impl ConfigState {
