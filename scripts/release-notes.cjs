@@ -155,6 +155,7 @@ Current version: ${getCurrentVersion()}
   } else {
     info(`⚠️  No changelog entry found for v${version}`);
     info(`   Expected: docs/changelog/YYYY-MM.md with header "## YYYY-MM-DD: Title (v${version})"`);
+    info(`   Will fall back to GitHub auto-generated release notes.`);
   }
 
   const releaseNotes = generateReleaseNotes(version, changelogEntry);
@@ -162,6 +163,8 @@ Current version: ${getCurrentVersion()}
   if (toStdout) {
     // Only the release body goes to stdout — clean for CI capture
     process.stdout.write(releaseNotes);
+    // Exit 2 = no changelog found → workflow should use auto-generated notes
+    if (!changelogEntry) process.exit(2);
   } else {
     fs.writeFileSync(OUTPUT_FILE, releaseNotes);
     info(`✨ Release notes written to RELEASE_NOTES.md`);
