@@ -22,6 +22,10 @@
   <a href="https://github.com/AnalyseDeCircuit/oxideterm/releases/latest">
     <img src="https://img.shields.io/github/v/release/AnalyseDeCircuit/oxideterm?label=Baixar%20última%20versão&style=for-the-badge&color=brightgreen" alt="Baixar última versão">
   </a>
+  &nbsp;&nbsp;
+  <a href="https://oxideterm.app">
+    <img src="https://img.shields.io/badge/Website-oxideterm.app-blue?style=for-the-badge" alt="Website">
+  </a>
 </p>
 
 <p align="center">
