@@ -120,7 +120,7 @@ jobs:
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          NOTES=$(pnpm release:notes "$VERSION" --stdout 2>/dev/null || echo "See the assets below to download the installer for your platform.")
+          NOTES=$(pnpm --silent release:notes "$VERSION" --stdout 2>/dev/null || echo "See the assets below to download the installer for your platform.")
           echo "body<<EOF" >> $GITHUB_OUTPUT
           echo "$NOTES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
