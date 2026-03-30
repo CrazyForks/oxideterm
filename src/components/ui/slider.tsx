@@ -83,8 +83,8 @@ const Slider = React.forwardRef<HTMLDivElement, SliderProps>(
           aria-valuemin={min}
           aria-valuemax={max}
           aria-valuenow={value}
-          className="absolute h-3.5 w-3.5 rounded-full border-2 border-theme-accent bg-theme-bg-panel shadow-sm transition-shadow hover:shadow-md focus-visible:ring-2 focus-visible:ring-theme-accent/40"
-          style={{ left: `calc(${pct}% - 7px)` }}
+          className="absolute h-4 w-4 rounded-full border border-black/20 dark:border-white/20 bg-white dark:bg-zinc-200 shadow-[0_2px_4px_rgba(0,0,0,0.4)] transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-theme-accent focus-visible:ring-offset-2 focus-visible:ring-offset-theme-bg"
+          style={{ left: `calc(${pct}% - 8px)` }}
         />
       </div>
     );
