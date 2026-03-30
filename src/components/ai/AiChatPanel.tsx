@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus, Trash2, MessageSquare, MoreVertical, Settings, Terminal, HelpCircle, FileCode, Zap, AlertTriangle, Shrink, Scissors } from 'lucide-react';

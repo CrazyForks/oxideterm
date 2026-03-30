@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 // src/components/ide/IdeEditorArea.tsx
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';

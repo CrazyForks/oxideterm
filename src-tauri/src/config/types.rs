@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Configuration Types
 //!
 //! Data structures for saved connections with version support for migrations.

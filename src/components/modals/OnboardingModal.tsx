@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dialog, DialogContent, DialogTitle } from '../ui/dialog';

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 import { X, Check, AlertCircle, RotateCcw, History, RefreshCw, Pause, Play } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';

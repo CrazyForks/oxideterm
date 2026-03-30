@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! WSL Graphics Forwarding Module
 //!
 //! Provides VNC-based graphics forwarding for Windows WSL (WSLg) environments.

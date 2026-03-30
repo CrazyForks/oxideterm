@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Session Reconnection Module
 //!
 //! Provides silent reconnection capabilities for SSH sessions.

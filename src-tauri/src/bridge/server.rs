@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! WebSocket Server for SSH bridge with Wire Protocol support
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};

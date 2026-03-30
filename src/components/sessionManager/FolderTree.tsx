@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 import { useTranslation } from 'react-i18next';
 import { ChevronRight, ChevronDown, Folder, FolderOpen, Clock, Inbox } from 'lucide-react';
 import { cn } from '../../lib/utils';

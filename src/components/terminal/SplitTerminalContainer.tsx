@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 import React, { useCallback, useRef, useEffect } from 'react';
 import { Panel, Group, Separator } from 'react-resizable-panels';
 import { PaneNode, PaneLeaf, PaneGroup as PaneGroupType } from '../../types';

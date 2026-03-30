@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! NodeEventEmitter — Oxide-Next Phase 2 事件推送
 //!
 //! 将后端状态变更以 `NodeStateEvent` 格式推送到前端，

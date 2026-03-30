@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 declare module '@novnc/novnc/lib/rfb.js' {
   interface RFBOptions {
     shared?: boolean;

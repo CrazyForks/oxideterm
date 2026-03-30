@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! NodeEventSequencer — generation 管理
 //!
 //! 每个节点维护一个独立的单调递增计数器，用于事件有序性保证。

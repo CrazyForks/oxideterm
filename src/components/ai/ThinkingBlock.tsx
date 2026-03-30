@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 import { memo, useState, useCallback } from 'react';
 import { ChevronDown, ChevronRight, Brain } from 'lucide-react';
 import { useTranslation } from 'react-i18next';

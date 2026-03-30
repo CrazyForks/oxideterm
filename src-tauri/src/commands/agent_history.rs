@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Agent Task History Commands
 //!
 //! Tauri IPC commands for persisting and querying agent task history.

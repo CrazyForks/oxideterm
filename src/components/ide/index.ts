@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 // src/components/ide/index.ts
 export { IdeWorkspace } from './IdeWorkspace';
 export { IdeTree } from './IdeTree';

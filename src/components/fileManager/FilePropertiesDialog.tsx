@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 /**
  * FilePropertiesDialog Component
  * Native-style file properties dialog (Get Info / Properties)

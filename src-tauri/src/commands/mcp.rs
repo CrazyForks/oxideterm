@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! MCP (Model Context Protocol) Stdio Transport
 //!
 //! Manages MCP server processes that communicate via stdin/stdout JSON-RPC.

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 import { api } from './api';
 import { useSessionTreeStore } from '../store/sessionTreeStore';
 import { useAppStore } from '../store/appStore';

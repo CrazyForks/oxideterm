@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 import type { Terminal } from '@xterm/xterm';
 import { useSettingsStore } from '../store/settingsStore';
 

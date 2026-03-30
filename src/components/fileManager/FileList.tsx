@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 /**
  * FileList Component
  * Generic file list UI supporting both local and remote file systems

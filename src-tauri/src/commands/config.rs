@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Configuration Commands
 //!
 //! Tauri commands for managing saved connections and SSH config import.

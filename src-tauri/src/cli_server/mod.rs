@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! CLI Companion Server
 //!
 //! Provides a local IPC server (Unix Domain Socket on macOS/Linux,

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Cross-platform IPC transport layer.
 //!
 //! - macOS/Linux: Unix Domain Socket at `~/.oxideterm/oxt.sock`

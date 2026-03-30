@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Session Tree Commands
 //!
 //! Tauri commands for managing the dynamic jump host session tree.

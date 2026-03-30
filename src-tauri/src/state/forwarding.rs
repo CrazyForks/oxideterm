@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Port forwarding rules persistence
 //!
 //! Handles serialization and deserialization of forward rules for recovery.

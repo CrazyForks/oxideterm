@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 /**
  * Office Document Preview Component
  * Supports Word (.docx), Excel (.xlsx), and PowerPoint (.pptx) files

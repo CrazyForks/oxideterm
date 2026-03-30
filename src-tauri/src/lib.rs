@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! OxideTerm - A modern SSH terminal client
 //!
 //! Built with Rust, Tauri, and xterm.js for high-performance terminal emulation.

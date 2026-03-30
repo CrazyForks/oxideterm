@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! WSLg availability detection.
 //!
 //! Detects whether WSLg (Windows Subsystem for Linux GUI) is available

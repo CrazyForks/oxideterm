@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! SFTP Transfer Retry Logic
 //!
 //! Provides automatic retry with exponential backoff for failed transfers.

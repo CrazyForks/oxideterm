@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! JSON-RPC 2.0 protocol types for CLI ↔ GUI communication.
 //!
 //! Wire format: newline-delimited JSON (consistent with agent protocol).

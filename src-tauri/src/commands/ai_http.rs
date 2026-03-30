@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! AI HTTP Proxy Commands
 //!
 //! Proxies AI provider API calls through the Rust backend to bypass

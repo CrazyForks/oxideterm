@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Keyboard-Interactive Authentication (2FA) Support
 //!
 //! This module provides a completely isolated 2FA authentication flow that:

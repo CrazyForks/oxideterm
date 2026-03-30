@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 export { useLocalFiles } from './useLocalFiles';
 export { useFileSelection } from './useFileSelection';
 export { useBookmarks } from './useBookmarks';

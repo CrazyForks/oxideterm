@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Health Check & Resource Profiler Tauri Commands
 //!
 //! Provides commands for monitoring connection health and remote resource metrics.

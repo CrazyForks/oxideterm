@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 /**
  * ToolIndicator — Shows active tool count badge next to ModelSelector.
  * Opens a popover allowing users to enable/disable tools per-group and per-tool.

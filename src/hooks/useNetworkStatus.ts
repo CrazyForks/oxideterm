@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 import { useEffect, useRef } from 'react';
 import { useAppStore } from '@/store/appStore';
 import { api } from '@/lib/api';

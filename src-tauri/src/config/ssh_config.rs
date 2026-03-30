@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! SSH Config Parser (Enhanced for HPC)
 //!
 //! Parses ~/.ssh/config to import existing SSH hosts.

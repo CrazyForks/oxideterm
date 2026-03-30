@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! AI Vault - Legacy Local Encrypted File Storage (DEPRECATED)
 //!
 //! ⚠️ **DEPRECATED since v1.6.0**: AI API keys are now stored in OS keychain

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 // src/components/ide/hooks/useCodeMirrorEditor.ts
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, drawSelection, highlightActiveLine, highlightSpecialChars, dropCursor, crosshairCursor, rectangularSelection, placeholder } from '@codemirror/view';

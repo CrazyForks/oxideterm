@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! IPC connection to the OxideTerm GUI process.
 //!
 //! - macOS/Linux: Unix Domain Socket at `~/.oxideterm/oxt.sock`

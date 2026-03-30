@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Session metadata persistence
 //!
 //! Handles serialization and deserialization of session metadata for recovery.

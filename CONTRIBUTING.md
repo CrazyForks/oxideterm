@@ -1,23 +1,24 @@
 # Contributing to OxideTerm
 
-## Pull requests — not accepted at this time
+Thank you for your interest in OxideTerm! We appreciate every form of contribution — from bug reports and feature ideas to plugins and documentation improvements.
 
-**We are not accepting pull requests right now.**  
-**目前不接受 PR。**
+## How to Contribute
 
-### Why we close PRs / 暂不接受的原因
+### Bug Reports & Feature Requests
 
-Accepting a pull request is not a one-time merge — it creates a **long-term maintenance burden**: future refactors, security fixes, regressions, and releases all have to **preserve and understand** code written by someone else. With **limited maintainer capacity**, we cannot sustainably review, integrate, and **carry** third-party changes across the whole codebase lifecycle. That is why we avoid merging PRs even when the initial patch looks reasonable.
+The best way to contribute is through [GitHub Issues](https://github.com/AnalyseDeCircuit/OxideTerm/issues). Clear, reproducible bug reports and well-thought-out feature proposals help shape the project's direction.
 
-**合并 PR 不是「合进去就结束」**——它意味着**长期维护责任**：之后的重构、安全修复、回归排查、发版，都要继续**理解并维护**这段外来代码。在**维护者精力有限**的前提下，我们无法长期为第三方改动做审查、集成并**持续背负**其后果，因此暂不接 PR；这与首版补丁「看起来好不好」无关。
+### Plugins
 
-This policy may change if maintenance capacity changes; this file will be updated if it does.
+OxideTerm has a **[plugin system](docs/reference/PLUGIN_DEVELOPMENT.md)** that lets you extend functionality without modifying core code. If you've built something cool, share it with the community!
 
----
+### Pull Requests
 
-If you have a feature idea, consider writing a **[plugin](docs/reference/PLUGIN_DEVELOPMENT.md)** instead — it extends OxideTerm without changing core code.
+We maintain a high bar for code that enters the core codebase. Before writing any code, **always open an Issue first** to discuss the approach — this avoids wasted effort on changes that may not align with the project's architecture or roadmap.
 
-If you want to propose a change to core, **open an Issue first** for discussion. Do not open a PR without prior agreement; it will be closed without review.
+Please understand that the maintainer team is small, and reviewing, integrating, and long-term maintaining third-party code is a significant commitment. PRs opened without prior discussion may be closed. When in doubt, a plugin is often the better path.
+
+If we do agree on a change, here's what to expect: the PR should be small, focused, well-tested, and link to the relevant Issue.
 
 ---
 
@@ -63,13 +64,13 @@ Other useful scripts: `pnpm i18n:check`, `pnpm license:check:backend`, `pnpm pro
 
 ---
 
-## If contributions open again — expected standards
+## Code Standards
 
-The following applies to **hypothetical** future contributions and helps you align with how the codebase is written today.
+All contributions must meet the following standards. Familiarity with these is expected before opening a PR.
 
 ### Process
 
-1. Discuss in an **Issue** before coding.
+1. Discuss in an **Issue** before coding — PRs without prior agreement are unlikely to be merged.
 2. Keep PRs **small and focused**; link the Issue.
 3. Read **[docs/reference/SYSTEM_INVARIANTS.md](docs/reference/SYSTEM_INVARIANTS.md)** before touching session, connection, or reconnect code.
 

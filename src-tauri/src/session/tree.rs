@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Session Tree - 动态交互式跳板机架构
 //!
 //! 支持三种跳板机模式:

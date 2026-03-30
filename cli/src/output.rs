@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Output formatting for CLI responses.
 //!
 //! Automatically detects terminal vs pipe context.

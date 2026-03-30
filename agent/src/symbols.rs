@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Lightweight symbol extraction using regex patterns.
 //!
 //! Provides basic symbol indexing for popular languages:

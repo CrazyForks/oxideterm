@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 // src/components/ide/IdeEditorTabs.tsx
 import { useCallback, useState, useRef, useMemo } from 'react';
 import { X, Circle, Loader2, Pin } from 'lucide-react';

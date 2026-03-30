@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 import { create } from 'zustand';
 import { api } from '../lib/api';
 import i18n from '../i18n';

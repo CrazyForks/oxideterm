@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Remote Environment Detector
 //!
 //! One-shot detection of remote host OS, architecture, shell, and distribution

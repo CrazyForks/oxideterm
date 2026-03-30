@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Agent Deployer — uploads and starts the agent on a remote host.
 //!
 //! Workflow:

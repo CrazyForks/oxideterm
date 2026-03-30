@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 // src/components/ide/dialogs/IdeAgentOptInDialog.tsx
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';

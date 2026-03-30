@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Transfer Manager for SFTP operations
 //!
 //! Provides concurrent transfer control with pause/cancel support.

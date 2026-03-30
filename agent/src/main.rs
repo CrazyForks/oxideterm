@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! OxideTerm Agent — lightweight remote helper for IDE mode.
 //!
 //! Runs on the remote host, communicates via stdin/stdout JSON-RPC.

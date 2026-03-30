@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 /**
  * BookmarksPanel Component
  * Sidebar panel for managing file manager bookmarks/favorites

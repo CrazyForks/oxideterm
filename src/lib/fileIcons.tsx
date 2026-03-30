@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 // src/lib/fileIcons.tsx
 // 统一的文件图标工具，基于 lucide-react
 // 用于 IDE 文件树、编辑器标签页、SFTP 视图等

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 import type { TabType } from '../../types';
 
 /** Human-readable label for each tab type (used in AI prompts) */

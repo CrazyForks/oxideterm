@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 /**
  * useNodeState — 订阅单个节点的实时状态 (Oxide-Next Phase 3)
  *

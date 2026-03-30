@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Terminal output parser for ANSI escape sequences
 //!
 //! Parses raw terminal output, strips ANSI codes, and splits into lines.

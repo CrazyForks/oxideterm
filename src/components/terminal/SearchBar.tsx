@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, X, ChevronUp, ChevronDown, CaseSensitive, Regex, WholeWord, History, Loader2 } from 'lucide-react';
 import { Input } from '../ui/input';

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Terminal scroll buffer for backend storage and search
 //!
 //! Provides a thread-safe circular buffer for terminal output with:

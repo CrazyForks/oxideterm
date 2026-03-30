@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! OxideTerm CLI — `oxt` command-line companion.
 //!
 //! Communicates with the running OxideTerm GUI via IPC

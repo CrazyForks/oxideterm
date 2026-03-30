@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Wire Protocol for OxideTerm Data Plane
 //!
 //! Protocol v1 Frame Format:

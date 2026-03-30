@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! SFTP file management module
 //!
 //! Provides remote file browsing, upload, download, and preview functionality.

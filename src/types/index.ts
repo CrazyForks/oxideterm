@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 // Session Types
 export type SessionState = 'disconnected' | 'connecting' | 'connected' | 'error' | 'reconnecting';
 export type AuthType = 'password' | 'key' | 'default_key' | 'agent' | 'certificate' | 'keyboard_interactive';

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! WebSocket Bridge module
 //!
 //! This module provides WebSocket server functionality for bridging

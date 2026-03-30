@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! RPC method implementations for CLI server.
 //!
 //! Each method receives JSON params and an AppHandle,

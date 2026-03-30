@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! SSH Agent Client — Cross-platform SSH Agent authentication
 //!
 //! Provides real SSH Agent integration via russh's [`AgentClient`], supporting

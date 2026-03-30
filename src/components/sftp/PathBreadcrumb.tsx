@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 import React from 'react';
 import { ChevronRight, Home, HardDrive, Server } from 'lucide-react';
 import { cn } from '../../lib/utils';

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Wire Protocol codec for OxideTerm WebSocket bridge.
 //!
 //! Binary format: [Type:1B][Length:4B BE][Payload:NB]

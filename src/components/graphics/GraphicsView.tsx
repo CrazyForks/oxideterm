@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 /**
  * WSL Graphics View — Built-in component for displaying WSL GUI apps via VNC/noVNC.
  *

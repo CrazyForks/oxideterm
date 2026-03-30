@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! JSON-RPC protocol types (backend mirror of agent/src/protocol.rs)
 //!
 //! These types match the agent's wire format exactly.

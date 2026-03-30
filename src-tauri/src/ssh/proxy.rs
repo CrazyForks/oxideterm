@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! ProxyJump Implementation for SSH
 //!
 //! Implements SSH connection through jump hosts (bastion hosts).

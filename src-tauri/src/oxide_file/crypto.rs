@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Cryptographic operations for .oxide file encryption/decryption
 
 use argon2::{Algorithm, Argon2, Params, Version};

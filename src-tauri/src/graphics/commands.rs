@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Tauri IPC commands for WSL Graphics.
 //!
 //! Seven commands exposed to the frontend via `generate_handler!`:

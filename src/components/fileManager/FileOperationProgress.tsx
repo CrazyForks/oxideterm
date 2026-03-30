@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 /**
  * FileOperationProgress
  * Shows a progress bar overlay at the bottom of the file manager during copy/paste operations.

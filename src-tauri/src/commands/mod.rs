@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Tauri Commands module
 //!
 //! This module contains all Tauri commands exposed to the frontend.

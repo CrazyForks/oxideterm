@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { AppLayout } from './components/layout/AppLayout';
 import { Toaster } from './components/ui/toaster';

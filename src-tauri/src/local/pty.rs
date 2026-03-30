@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! PTY (Pseudo-Terminal) abstraction
 //!
 //! Wraps portable-pty to provide a unified interface for creating

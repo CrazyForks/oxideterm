@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Resumable update manager
 //!
 //! Supports断点续传 download, signature verification, and cross-restart recovery.

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Node-first Forwarding commands — Oxide-Next Convergence
 //!
 //! 所有命令接受 nodeId 而非 sessionId。

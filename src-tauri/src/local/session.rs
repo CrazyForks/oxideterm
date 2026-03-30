@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Local Terminal Session
 //!
 //! Manages a single local terminal session with PTY, data pump,

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! SSH-style escape sequence detector.
 //!
 //! Detects `~.` (detach), `~?` (help), `~~` (literal tilde)

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Node-first Agent commands
 //!
 //! Provides Tauri IPC commands for deploying and interacting with the

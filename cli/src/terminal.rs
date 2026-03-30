@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Raw terminal mode management.
 //!
 //! Provides RAII-based raw mode toggling and terminal size queries.

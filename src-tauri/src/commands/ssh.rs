@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! SSH Connection Commands
 //!
 //! 独立的 SSH 连接管理命令，与终端界面解耦。

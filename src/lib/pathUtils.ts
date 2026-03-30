@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 /**
  * 路径处理工具函数
  * 用于 IDE 模式的文件操作，统一处理各种边界情况

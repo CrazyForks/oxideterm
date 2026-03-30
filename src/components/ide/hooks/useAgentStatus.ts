@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 // src/components/ide/hooks/useAgentStatus.ts
 //
 // Hook for tracking Agent deployment status and providing

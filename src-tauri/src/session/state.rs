@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Session State Machine
 //!
 //! Defines the valid state transitions for SSH sessions:

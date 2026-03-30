@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Oxide-Next NodeRouter — Phase 2
 //!
 //! 节点路由器：将 nodeId 解析为具体的后端资源。

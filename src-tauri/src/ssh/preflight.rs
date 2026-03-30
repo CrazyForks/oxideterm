@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! SSH Host Key Preflight Check
 //!
 //! TOFU (Trust On First Use) implementation for SSH host key verification.

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Tauri commands for .oxide file export
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};

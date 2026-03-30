@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Resource Profiler Module
 //!
 //! Samples remote host resources (CPU, memory, load, network) via a persistent SSH shell channel.

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Plugin system backend commands
 //!
 //! Handles plugin discovery, file reading, and configuration persistence.

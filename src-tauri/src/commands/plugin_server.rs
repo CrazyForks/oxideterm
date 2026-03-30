@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Plugin File Server
 //!
 //! Lightweight HTTP/1.1 server for serving multi-file plugin packages.

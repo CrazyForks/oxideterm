@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Network Topology Graph for Auto-Route Calculation
 //!
 //! Auto-generates topology from saved connections:

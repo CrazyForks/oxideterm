@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 import { memo, useState, useCallback } from 'react';
 import { ChevronDown, ChevronRight, Terminal, FileText, FolderOpen, Search, GitBranch, Pen, Loader2, CheckCircle2, XCircle, AlertTriangle, Package, Network, Radio, CirclePlus, CircleStop, Activity, HardDrive, FolderSearch, FileCode, Code2, Info, ListTree, Settings, Puzzle, ShieldAlert, Check, X, Eye, Zap, Layers, Monitor, Keyboard, MousePointer2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';

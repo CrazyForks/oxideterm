@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Auto Reconnect Service - NEUTRALIZED
 //!
 //! ⚠️ 此模块已被物理阉割。

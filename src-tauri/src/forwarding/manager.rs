@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Port Forwarding Manager
 //!
 //! Centralized management for all port forwards in a session.

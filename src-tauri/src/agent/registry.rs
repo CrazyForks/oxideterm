@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Agent Registry — manages active agent sessions per SSH connection.
 //!
 //! Each SSH connection can have at most one agent session.

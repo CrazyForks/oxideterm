@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Shell detection and scanning
 //!
 //! Automatically detects available shells on the system and provides

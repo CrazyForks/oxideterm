@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Remote Port Forwarding
 //!
 //! Forwards connections from a remote port back to a local host:port through SSH.

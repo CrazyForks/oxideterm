@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Sparkles, X, Check, AlertCircle, CornerDownLeft, Play, Copy, RotateCcw } from 'lucide-react';
 import { useSettingsStore } from '../../store/settingsStore';

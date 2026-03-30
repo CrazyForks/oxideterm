@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Handle Owner Task
 //!
 //! This module implements the "single owner" pattern for SSH Handle.

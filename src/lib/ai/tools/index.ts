@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 export {
   BUILTIN_TOOLS,
   SFTP_TOOL_DEFS,

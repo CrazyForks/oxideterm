@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 // src/store/ideStore.ts
 import { create } from 'zustand';
 import { subscribeWithSelector, persist } from 'zustand/middleware';

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 /**
  * FontPreview Component
  * Preview font files (TTF, OTF, WOFF, WOFF2) with sample text

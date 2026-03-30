@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! WebSocket ↔ VNC TCP transparent proxy (bridge).
 //!
 //! Accepts a single WebSocket connection (from noVNC in the frontend),

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Keychain Integration
 //!
 //! Securely stores passwords and passphrases in the system keychain.

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Play, Square, RefreshCcw, Plus, Trash2, ArrowRight, Pencil, Activity, X, Loader2, Radio, ArrowUpDown, Copy, Check } from 'lucide-react';

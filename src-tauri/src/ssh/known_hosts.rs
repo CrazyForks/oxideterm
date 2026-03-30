@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Known hosts management for SSH host key verification
 //!
 //! Wraps russh::keys known_hosts functionality with additional features.

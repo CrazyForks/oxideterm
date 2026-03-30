@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! CLI companion install/uninstall commands.
 //!
 //! The `oxt` CLI binary is bundled with the app but not installed by default.

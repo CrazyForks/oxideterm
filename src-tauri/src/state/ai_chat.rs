@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! AI Chat persistence using redb
 //!
 //! Provides persistent storage for AI conversations and messages with:

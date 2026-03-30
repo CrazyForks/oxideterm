@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! SSH module - handles SSH connections and sessions
 //!
 //! This module provides the core SSH functionality using russh library.

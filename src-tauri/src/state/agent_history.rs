@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Agent Task History persistence using redb
 //!
 //! Stores agent task history as opaque JSON blobs (compressed with zstd).

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! State persistence using redb + MessagePack (rmp-serde)
 //! Handles session metadata, forward rules, AI chat history and agent task persistence
 

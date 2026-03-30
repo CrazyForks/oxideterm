@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Dynamic SOCKS5 Proxy Forwarding
 //!
 //! Implements a local SOCKS5 proxy server that tunnels connections through SSH.

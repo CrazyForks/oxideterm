@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 // src/components/ide/CodeEditorSearchBar.tsx
 /**
  * 编辑器内搜索栏

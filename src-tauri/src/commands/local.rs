@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Local Terminal Commands
 //!
 //! Tauri commands for local terminal (PTY) operations.

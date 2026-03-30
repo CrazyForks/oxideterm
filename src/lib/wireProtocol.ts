@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 // Wire Protocol v1
 // Frame Format: [Type: 1 byte][Length: 4 bytes big-endian][Payload: n bytes]
 

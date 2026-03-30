@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 /**
  * QuickLook Component
  * Smart file preview with support for images, markdown, code, fonts, archives, and more

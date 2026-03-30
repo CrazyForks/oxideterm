@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 import { useTranslation } from 'react-i18next';
 import { Play, Pencil, MoreHorizontal, Copy, Trash2, KeyRound, Lock, Bot, ShieldQuestion } from 'lucide-react';
 import { cn } from '../../lib/utils';

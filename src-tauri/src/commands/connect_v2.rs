@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Session and Connection Management Commands
 //!
 //! This module provides commands for managing SSH sessions and the connection pool.

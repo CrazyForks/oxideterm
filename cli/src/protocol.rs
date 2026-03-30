@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! JSON-RPC 2.0 protocol types (CLI side).
 
 use serde::{Deserialize, Serialize};

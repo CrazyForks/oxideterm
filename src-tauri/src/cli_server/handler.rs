@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! JSON-RPC request handler for CLI connections.
 //!
 //! Each CLI connection is a line-delimited JSON-RPC stream.

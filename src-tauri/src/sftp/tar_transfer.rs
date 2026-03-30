@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Tar-on-the-fly streaming transfer for directories
 //!
 //! Instead of transferring thousands of small files via individual SFTP

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! File system operations — POSIX-native, no SFTP limitations.
 //!
 //! All operations use standard library I/O with real POSIX semantics:

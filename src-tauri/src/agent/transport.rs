@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Agent Transport — JSON-RPC over SSH exec channel
 //!
 //! Manages a persistent SSH exec channel to the remote agent process.

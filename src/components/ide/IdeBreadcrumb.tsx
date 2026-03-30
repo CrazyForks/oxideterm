@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 // src/components/ide/IdeBreadcrumb.tsx
 import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { ChevronRight, File } from 'lucide-react';

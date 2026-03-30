@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Bridge Manager - manages all active WebSocket bridges
 
 use parking_lot::RwLock;

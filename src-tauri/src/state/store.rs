@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Core StateStore implementation using redb
 //!
 //! Provides high-performance embedded database for session and forward state persistence.

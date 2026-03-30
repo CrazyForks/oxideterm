@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! .oxide file format specification and binary serialization
 
 use super::error::OxideFileError;

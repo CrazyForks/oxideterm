@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! SSH Connection Registry
 //!
 //! 独立的 SSH 连接池管理，与前端界面完全解耦。

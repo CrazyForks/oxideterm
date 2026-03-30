@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Cross-platform path utilities for SFTP operations
 //!
 //! Provides unified path handling that works correctly on Windows (including UNC paths)

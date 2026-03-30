@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AnalyseDeCircuit
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Touch ID Authentication (macOS only)
 //!
 //! Uses `LAContext` from the `LocalAuthentication` framework to authenticate
