@@ -192,7 +192,8 @@
     "cmd_open_topology": "Open Topology View",
     "cmd_reset_settings": "Reset All Settings",
     "confirm_reset_settings": "Are you sure you want to reset all settings to defaults?",
-    "cmd_reload_window": "Reload Window"
+    "cmd_reload_window": "Reload Window",
+    "footer_hint": "Press Esc to close"
   },
   "zen_mode": {
     "hint": "Zen Mode — Press ⌘⇧Z to exit",

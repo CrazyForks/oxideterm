@@ -192,7 +192,8 @@
     "cmd_open_topology": "打开拓扑视图",
     "cmd_reset_settings": "重置所有设置",
     "confirm_reset_settings": "确定要将所有设置重置为默认值吗？",
-    "cmd_reload_window": "重新加载窗口"
+    "cmd_reload_window": "重新加载窗口",
+    "footer_hint": "按 Esc 关闭"
   },
   "zen_mode": {
     "hint": "Zen 模式 — 按 ⌘⇧Z 退出",

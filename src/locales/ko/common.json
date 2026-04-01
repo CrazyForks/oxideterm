@@ -192,7 +192,8 @@
     "cmd_open_topology": "토폴로지 보기 열기",
     "cmd_reset_settings": "모든 설정 초기화",
     "confirm_reset_settings": "모든 설정을 기본값으로 초기화하시겠습니까?",
-    "cmd_reload_window": "창 새로고침"
+    "cmd_reload_window": "창 새로고침",
+    "footer_hint": "Esc를 눌러 닫기"
   },
   "zen_mode": {
     "hint": "Zen 모드 — ⌘⇧Z를 눌러 종료",

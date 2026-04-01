@@ -192,7 +192,8 @@
     "cmd_open_topology": "トポロジービューを開く",
     "cmd_reset_settings": "すべての設定をリセット",
     "confirm_reset_settings": "すべての設定をデフォルトに戻しますか？",
-    "cmd_reload_window": "ウィンドウを再読み込み"
+    "cmd_reload_window": "ウィンドウを再読み込み",
+    "footer_hint": "Escで閉じる"
   },
   "zen_mode": {
     "hint": "Zen モード — ⌘⇧Z で終了",

@@ -192,7 +192,8 @@
     "cmd_open_topology": "Mở chế độ xem topo",
     "cmd_reset_settings": "Đặt lại tất cả cài đặt",
     "confirm_reset_settings": "Bạn có chắc muốn đặt lại tất cả cài đặt về mặc định không?",
-    "cmd_reload_window": "Tải lại cửa sổ"
+    "cmd_reload_window": "Tải lại cửa sổ",
+    "footer_hint": "Nhấn Esc để đóng"
   },
   "zen_mode": {
     "hint": "Chế độ Zen — Nhấn ⌘⇧Z để thoát",

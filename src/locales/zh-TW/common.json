@@ -191,7 +191,8 @@
     "cmd_open_topology": "開啟拓撲檢視",
     "cmd_reset_settings": "重設所有設定",
     "confirm_reset_settings": "確定要將所有設定重設為預設值嗎？",
-    "cmd_reload_window": "重新載入視窗"
+    "cmd_reload_window": "重新載入視窗",
+    "footer_hint": "按 Esc 關閉"
   },
   "zen_mode": {
     "hint": "Zen 模式 — 按 ⌘⇧Z 退出",

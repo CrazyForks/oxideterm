@@ -192,7 +192,8 @@
     "cmd_open_topology": "Topologie-Ansicht öffnen",
     "cmd_reset_settings": "Alle Einstellungen zurücksetzen",
     "confirm_reset_settings": "Sind Sie sicher, dass Sie alle Einstellungen auf die Standardwerte zurücksetzen möchten?",
-    "cmd_reload_window": "Fenster neu laden"
+    "cmd_reload_window": "Fenster neu laden",
+    "footer_hint": "Esc zum Schließen drücken"
   },
   "zen_mode": {
     "hint": "Zen-Modus — Drücken Sie ⌘⇧Z zum Beenden",

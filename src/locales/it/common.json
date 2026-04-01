@@ -192,7 +192,8 @@
     "cmd_open_topology": "Apri vista topologica",
     "cmd_reset_settings": "Reimposta tutte le impostazioni",
     "confirm_reset_settings": "Sei sicuro di voler reimpostare tutte le impostazioni ai valori predefiniti?",
-    "cmd_reload_window": "Ricarica finestra"
+    "cmd_reload_window": "Ricarica finestra",
+    "footer_hint": "Premi Esc per chiudere"
   },
   "zen_mode": {
     "hint": "Modalità Zen — Premi ⌘⇧Z per uscire",

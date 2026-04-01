@@ -192,7 +192,8 @@
     "cmd_open_topology": "Abrir visualização de topologia",
     "cmd_reset_settings": "Redefinir todas as configurações",
     "confirm_reset_settings": "Tem certeza de que deseja redefinir todas as configurações para os padrões?",
-    "cmd_reload_window": "Recarregar janela"
+    "cmd_reload_window": "Recarregar janela",
+    "footer_hint": "Pressione Esc para fechar"
   },
   "zen_mode": {
     "hint": "Modo Zen — Pressione ⌘⇧Z para sair",
