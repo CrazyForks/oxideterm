@@ -57,7 +57,7 @@
     "createUpdaterArtifacts": true,
     "resources": [
       "agents/oxideterm-agent-*-linux-musl",
-      "cli-bin/*"
+      "cli-bin"
     ]
   },
   "plugins": {

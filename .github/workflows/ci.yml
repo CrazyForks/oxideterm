@@ -80,6 +80,10 @@ jobs:
             pkg-config \
             build-essential
 
+      - name: Ensure bundled resource directories exist
+        run: |
+          mkdir -p src-tauri/cli-bin
+
       - name: cargo check (src-tauri)
         run: cd src-tauri && cargo check --all-features
 
