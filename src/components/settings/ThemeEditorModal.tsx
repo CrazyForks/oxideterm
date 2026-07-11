@@ -43,6 +43,7 @@ import {
   saveCustomTheme,
   deleteCustomTheme,
   deriveUiColorsFromTerminal,
+  getThemeUiColors,
   getTerminalTheme,
 } from '../../lib/themes';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -292,7 +293,7 @@ export const ThemeEditorModal = ({ open, onOpenChange, editThemeId, baseThemeId 
       const baseTerminal = getTerminalTheme(baseId);
       setName(t('settings_view.custom_theme.new_theme_name'));
       setTermColors({ ...baseTerminal });
-      setUiColors(deriveUiColorsFromTerminal(baseTerminal));
+      setUiColors(getThemeUiColors(baseId));
     }
     setActiveSection('terminal');
   }, [open, editThemeId, baseThemeId, t]);
@@ -341,7 +342,7 @@ export const ThemeEditorModal = ({ open, onOpenChange, editThemeId, baseThemeId 
   const handleDuplicate = useCallback((sourceId: string) => {
     const source = getTerminalTheme(sourceId);
     setTermColors({ ...source });
-    setUiColors(deriveUiColorsFromTerminal(source));
+    setUiColors(getThemeUiColors(sourceId));
   }, []);
 
   // ── Preview ──
