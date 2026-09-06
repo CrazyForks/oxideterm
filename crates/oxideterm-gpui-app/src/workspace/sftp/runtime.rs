@@ -50,6 +50,20 @@ struct SftpRemoteListOutcome {
     changed: bool,
 }
 
+fn sftp_open_presentation(
+    preferred: oxideterm_settings::SftpPresentationPreference,
+    existing_tab: bool,
+    sftp_tab_active: bool,
+) -> oxideterm_settings::SftpPresentationPreference {
+    // The sidebar is hidden while an SFTP tab is active and must not take over
+    // its shared entity. Existing tabs also retain their detached-window routing.
+    if existing_tab || sftp_tab_active {
+        oxideterm_settings::SftpPresentationPreference::Tab
+    } else {
+        preferred
+    }
+}
+
 fn sidebar_sftp_target(
     opened: Option<&NodeId>,
     pinned: bool,
@@ -878,7 +892,11 @@ impl WorkspaceApp {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        match self.settings_store.settings().sftp.presentation {
+        match self.sftp_presentation_for_node(
+            &node_id,
+            self.settings_store.settings().sftp.presentation,
+            cx,
+        ) {
             oxideterm_settings::SftpPresentationPreference::Ask => {
                 self.sftp_presentation_request = Some(SftpPresentationRequest {
                     node_id,
@@ -894,6 +912,22 @@ impl WorkspaceApp {
                 self.open_sftp_sidebar_surface(node_id, remote_path, cx);
             }
         }
+    }
+
+    fn sftp_presentation_for_node(
+        &self,
+        node_id: &NodeId,
+        preferred: oxideterm_settings::SftpPresentationPreference,
+        cx: &App,
+    ) -> oxideterm_settings::SftpPresentationPreference {
+        sftp_open_presentation(
+            preferred,
+            self.sftp_tab_nodes
+                .values()
+                .any(|existing| existing == node_id),
+            self.active_tab(cx)
+                .is_some_and(|tab| tab.kind == TabKind::Sftp),
+        )
     }
 
     pub(in crate::workspace) fn open_sftp_tab_surface(
@@ -1102,7 +1136,7 @@ impl WorkspaceApp {
             return;
         };
         self.edit_settings(|settings| settings.sftp.presentation = preference, cx);
-        match preference {
+        match self.sftp_presentation_for_node(&request.node_id, preference, cx) {
             oxideterm_settings::SftpPresentationPreference::Ask => {}
             oxideterm_settings::SftpPresentationPreference::Tab => {
                 self.open_sftp_tab_surface(request.node_id, request.remote_path, cx);
@@ -1766,6 +1800,45 @@ impl SftpWorkspaceEntity {
 #[cfg(test)]
 mod remote_load_state_tests {
     use super::*;
+
+    #[test]
+    fn reopening_expanded_sftp_keeps_directory_load_on_visible_tab() {
+        use oxideterm_settings::SftpPresentationPreference;
+
+        let mut sftp = SftpWorkspaceEntity::default();
+        let remote = SftpRemoteId::Node(NodeId::new("reopened-server"));
+        let tab = SftpSurfaceId::Tab(TabId(1));
+        sftp.activate_view(SftpSurfaceId::Sidebar, remote.clone());
+        sftp.activate_view(tab, remote.clone());
+        // Complete the initial listing before repeating the sidebar action.
+        sftp.start_remote_load(tab, &remote)
+            .expect("initial tab load");
+        sftp.set_remote_load_state(sftp.remote_load_state().complete());
+        let presentation = sftp_open_presentation(SftpPresentationPreference::Sidebar, true, true);
+        let surface = match presentation {
+            SftpPresentationPreference::Tab => tab,
+            SftpPresentationPreference::Sidebar => SftpSurfaceId::Sidebar,
+            SftpPresentationPreference::Ask => panic!("existing tab must not ask again"),
+        };
+        sftp.activate_view(surface, remote.clone());
+
+        assert!(sftp.start_remote_load(tab, &remote).is_some());
+        assert!(!sftp.remote_load_pending);
+        assert!(sftp.remote_load_inflight);
+    }
+
+    #[test]
+    fn sftp_presentation_reuses_tabs_without_changing_first_open_preference() {
+        use oxideterm_settings::SftpPresentationPreference::{Ask, Sidebar, Tab};
+
+        for preference in [Ask, Sidebar, Tab] {
+            assert_eq!(sftp_open_presentation(preference, false, false), preference);
+            // Reuse an existing tab even when another tab or window is focused.
+            assert_eq!(sftp_open_presentation(preference, true, false), Tab);
+            // A different node must not activate a hidden sidebar either.
+            assert_eq!(sftp_open_presentation(preference, false, true), Tab);
+        }
+    }
 
     #[test]
     fn sftp_ready_event_preserves_pending_terminal_cwd() {
