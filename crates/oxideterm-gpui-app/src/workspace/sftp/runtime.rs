@@ -50,6 +50,19 @@ struct SftpRemoteListOutcome {
     changed: bool,
 }
 
+fn sidebar_sftp_target(
+    opened: Option<&NodeId>,
+    pinned: bool,
+    focused: Option<NodeId>,
+) -> Option<NodeId> {
+    let opened = opened?;
+    if pinned {
+        Some(opened.clone())
+    } else {
+        focused
+    }
+}
+
 impl SftpWorkspaceEntity {
     fn remote_load_state(&self) -> SftpRemoteLoadState {
         SftpRemoteLoadState {
@@ -1106,6 +1119,8 @@ impl WorkspaceApp {
         remote_path: Option<String>,
         cx: &mut Context<Self>,
     ) {
+        // An explicit request for another server stays visible until the user enables following.
+        self.embedded_sftp_pinned = self.active_ssh_terminal_node_id(cx).as_ref() != Some(&node_id);
         self.embedded_sftp_node_id = Some(node_id.clone());
         self.active_ssh_node_id = Some(node_id.clone());
         self.expanded_ssh_nodes.insert(node_id.clone());
@@ -1134,6 +1149,7 @@ impl WorkspaceApp {
         }
 
         self.embedded_sftp_node_id = None;
+        self.embedded_sftp_pinned = false;
         self.embedded_sftp_sidebar_resizing = false;
         if self
             .sftp_presentation_request
@@ -1159,6 +1175,14 @@ impl WorkspaceApp {
         true
     }
 
+    pub(in crate::workspace) fn embedded_sftp_target(&self, cx: &App) -> Option<NodeId> {
+        sidebar_sftp_target(
+            self.embedded_sftp_node_id.as_ref(),
+            self.embedded_sftp_pinned,
+            self.active_ssh_terminal_node_id(cx),
+        )
+    }
+
     pub(in crate::workspace) fn activate_embedded_sftp_sidebar_if_visible(
         &mut self,
         cx: &mut Context<Self>,
@@ -1171,9 +1195,31 @@ impl WorkspaceApp {
         {
             return;
         }
-        let Some(node_id) = self.embedded_sftp_node_id.clone() else {
+        let target = self.embedded_sftp_target(cx);
+        let previous = {
+            let sftp = self.sftp_view.read(cx);
+            (sftp.current_surface_id == Some(SftpSurfaceId::Sidebar))
+                .then(|| sftp.current_remote_id.clone())
+                .flatten()
+        };
+        if let Some(previous) = previous.filter(|previous| {
+            Some(previous)
+                != target
+                    .as_ref()
+                    .map(|node| SftpRemoteId::Node(node.clone()))
+                    .as_ref()
+        }) {
+            // Retire pending dialogs and selections with the old target. Transfers
+            // retain their own remote identity and node consumer.
+            self.sftp_view.update(cx, |sftp, cx| {
+                sftp.deactivate_view(SftpSurfaceId::Sidebar, &previous, cx);
+            });
+            self.ime_marked_text = None;
+        }
+        let Some(node_id) = target else {
             return;
         };
+        self.embedded_sftp_node_id = Some(node_id.clone());
         let already_active = {
             let sftp = self.sftp_view.read(cx);
             sftp.current_surface_id == Some(SftpSurfaceId::Sidebar)
@@ -1412,7 +1458,10 @@ impl WorkspaceApp {
                 };
                 !self.sidebar_collapsed
                     && self.effective_sidebar_panel_section() == SidebarSection::Sessions
-                    && self.embedded_sftp_node_id.as_ref() == Some(node_id)
+                    && !self
+                        .active_tab(cx)
+                        .is_some_and(|tab| tab.kind == TabKind::Sftp)
+                    && self.embedded_sftp_target(cx).as_ref() == Some(node_id)
             }
         }
     }
@@ -1836,6 +1885,25 @@ fn apply_tauri_transfer_completion(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    #[test]
+    fn sidebar_follows_focus_unless_pinned_and_stays_closed_until_opened() {
+        let a = NodeId::new("a");
+        let b = NodeId::new("b");
+        assert_eq!(
+            sidebar_sftp_target(Some(&a), false, Some(b.clone())),
+            Some(b.clone())
+        );
+        assert_eq!(
+            sidebar_sftp_target(Some(&a), true, Some(b.clone())),
+            Some(a.clone())
+        );
+        assert_eq!(sidebar_sftp_target(Some(&a), false, None), None);
+        assert_eq!(sidebar_sftp_target(Some(&a), true, None), Some(a));
+        assert_eq!(sidebar_sftp_target(None, false, Some(b)), None);
+    }
+
     #[test]
     fn stale_node_sftp_errors_are_connection_unavailable() {
         assert!(oxideterm_sftp::error_is_connection_unavailable(

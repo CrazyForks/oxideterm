@@ -811,6 +811,7 @@ impl WorkspaceApp {
             ssh_consumer_managed_key_resolver,
             pending_standalone_sftp_pair_launches: HashMap::new(),
             embedded_sftp_node_id: None,
+            embedded_sftp_pinned: false,
             sftp_presentation_request: None,
             ide_workspace,
             _ide_workspace_subscription: ide_workspace_subscription,

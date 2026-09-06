@@ -513,6 +513,7 @@ impl WorkspaceApp {
         }) {
             self.register_terminal_pane(pane_id, session_id, pane.clone(), window, cx);
             self.bind_terminal_location(target.tab_id, pane_id, session_id, cx);
+            self.activate_embedded_sftp_sidebar_if_visible(cx);
             self.needs_active_pane_focus = true;
             pane.update(cx, |pane, cx| pane.focus(window, cx));
             cx.notify();
@@ -547,6 +548,7 @@ impl WorkspaceApp {
         });
         if mounted {
             self.bind_terminal_location(target.tab_id, pane_id, session_id, cx);
+            self.activate_embedded_sftp_sidebar_if_visible(cx);
             self.needs_active_pane_focus = true;
             self.focus_active_pane(window, cx);
             cx.notify();
@@ -615,6 +617,7 @@ impl WorkspaceApp {
             })
             .is_some()
         {
+            self.activate_embedded_sftp_sidebar_if_visible(cx);
             self.needs_active_pane_focus = true;
             self.focus_active_pane(window, cx);
             cx.notify();
@@ -670,6 +673,7 @@ impl WorkspaceApp {
         self.tab_host.update(cx, |tab_host, _| {
             tab_host.reset_to_single_pane(tab_id, active_pane_id, active_session_id);
         });
+        self.activate_embedded_sftp_sidebar_if_visible(cx);
         self.needs_active_pane_focus = true;
         self.focus_active_pane(window, cx);
         cx.notify();
@@ -793,6 +797,7 @@ impl WorkspaceApp {
                                         tab_host.set_active_pane(None, pane_id);
                                     });
                                 }
+                                this.activate_embedded_sftp_sidebar_if_visible(cx);
                                 if let Some(pane) =
                                     this.tab_host.read(cx).panes().get(&pane_id).cloned()
                                 {

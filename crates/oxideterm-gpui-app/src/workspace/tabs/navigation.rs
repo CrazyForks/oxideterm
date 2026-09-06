@@ -934,6 +934,7 @@ impl WorkspaceApp {
         self.tab_host.update(cx, |tab_host, _| {
             tab_host.set_active_pane(None, next_pane_id);
         });
+        self.activate_embedded_sftp_sidebar_if_visible(cx);
         self.needs_active_pane_focus = true;
         self.focus_active_pane(window, cx);
         cx.notify();

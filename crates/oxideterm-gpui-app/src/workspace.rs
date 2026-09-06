@@ -896,6 +896,7 @@ pub(crate) struct WorkspaceApp {
     pending_standalone_sftp_pair_launches:
         HashMap<String, new_connection::PendingStandaloneSftpPairLaunch>,
     embedded_sftp_node_id: Option<NodeId>,
+    embedded_sftp_pinned: bool,
     sftp_presentation_request: Option<sftp::SftpPresentationRequest>,
     ide_workspace: Entity<ide::IdeWorkspaceEntity>,
     _ide_workspace_subscription: Subscription,
