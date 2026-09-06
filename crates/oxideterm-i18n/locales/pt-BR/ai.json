@@ -530,6 +530,20 @@
       "level_high": "Alto (high)",
       "level_xhigh": "Muito alto (xhigh)",
       "level_max": "Máximo (max)"
+    },
+    "queue": {
+      "enqueue": "Enfileirar",
+      "steer": "Redirecionar",
+      "interrupt_send": "Interromper e enviar",
+      "heading": "Mensagens na fila · {{count}}",
+      "paused": "Pendentes · {{count}} · Envie para continuar",
+      "edit": "Editar",
+      "remove": "Excluir",
+      "move_up": "Mover acima",
+      "send_now": "Enviar agora",
+      "draft_not_empty": "Envie ou limpe o rascunho atual antes de editar uma mensagem na fila.",
+      "steer_unavailable": "Este turno não pode receber um redirecionamento agora. Sua mensagem foi mantida.",
+      "client_command_busy": "Aguarde o término da tarefa atual antes de usar este comando."
     }
   }
 }

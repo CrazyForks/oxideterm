@@ -40,10 +40,25 @@ impl AgentResourceCoordinator {
         !state.leases.is_empty() || !state.blocked.is_empty()
     }
 
-    pub fn unresolved_owned_by(&self, run: &AgentRunRef, include_running_command: bool) -> Vec<RuntimeOwnerKey> {
+    pub fn unresolved_owned_by(
+        &self,
+        run: &AgentRunRef,
+        include_running_command: bool,
+    ) -> Vec<RuntimeOwnerKey> {
         let state = self.state.lock();
-        state.blocked_owners.iter().filter(|(_, owner)| *owner == run).map(|(key, _)| key.clone())
-            .chain(state.leases.values().filter(|lease| include_running_command && &lease.owner == run).map(|lease| lease.resource.clone())).collect()
+        state
+            .blocked_owners
+            .iter()
+            .filter(|(_, owner)| *owner == run)
+            .map(|(key, _)| key.clone())
+            .chain(
+                state
+                    .leases
+                    .values()
+                    .filter(|lease| include_running_command && &lease.owner == run)
+                    .map(|lease| lease.resource.clone()),
+            )
+            .collect()
     }
     pub fn workspace_resource(&self) -> RuntimeOwnerKey {
         self.workspace.clone()
@@ -127,7 +142,11 @@ impl AgentResourceCoordinator {
         state.blocked.insert(resource.clone());
         *state.epochs.entry(resource.clone()).or_default() += 1;
         let removed = state.leases.remove(resource);
-        if let Some(lease) = &removed { state.blocked_owners.insert(resource.clone(), lease.owner.clone()); }
+        if let Some(lease) = &removed {
+            state
+                .blocked_owners
+                .insert(resource.clone(), lease.owner.clone());
+        }
         drop(state);
         self.changed
             .send_modify(|revision| *revision = revision.wrapping_add(1));

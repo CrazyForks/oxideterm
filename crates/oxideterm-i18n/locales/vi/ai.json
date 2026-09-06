@@ -530,6 +530,20 @@
       "level_high": "Cao (high)",
       "level_xhigh": "Rất cao (xhigh)",
       "level_max": "Tối đa (max)"
+    },
+    "queue": {
+      "enqueue": "Xếp hàng",
+      "steer": "Đổi hướng",
+      "interrupt_send": "Dừng và gửi",
+      "heading": "Tin nhắn chờ · {{count}}",
+      "paused": "Đang chờ · {{count}} · Gửi để tiếp tục",
+      "edit": "Sửa",
+      "remove": "Xóa",
+      "move_up": "Chuyển lên",
+      "send_now": "Gửi ngay",
+      "draft_not_empty": "Gửi hoặc xóa bản nháp hiện tại trước khi sửa tin nhắn đang chờ.",
+      "steer_unavailable": "Lượt hiện tại chưa thể nhận yêu cầu đổi hướng. Tin nhắn của bạn đã được giữ lại.",
+      "client_command_busy": "Chờ tác vụ hiện tại kết thúc trước khi dùng lệnh này."
     }
   }
 }

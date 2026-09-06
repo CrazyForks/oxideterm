@@ -530,6 +530,20 @@
       "level_high": "Élevé (high)",
       "level_xhigh": "Très élevé (xhigh)",
       "level_max": "Maximum (max)"
+    },
+    "queue": {
+      "enqueue": "Mettre en file",
+      "steer": "Réorienter",
+      "interrupt_send": "Interrompre et envoyer",
+      "heading": "Messages en file · {{count}}",
+      "paused": "En attente · {{count}} · Envoyer pour reprendre",
+      "edit": "Modifier",
+      "remove": "Supprimer",
+      "move_up": "Monter",
+      "send_now": "Envoyer maintenant",
+      "draft_not_empty": "Envoyez ou effacez le brouillon actuel avant de modifier un message en file.",
+      "steer_unavailable": "Ce tour ne peut pas être réorienté pour le moment. Votre message est conservé.",
+      "client_command_busy": "Attendez la fin de la tâche actuelle avant d’utiliser cette commande."
     }
   }
 }

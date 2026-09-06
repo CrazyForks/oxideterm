@@ -530,6 +530,20 @@
       "level_high": "Alto (high)",
       "level_xhigh": "Molto alto (xhigh)",
       "level_max": "Massimo (max)"
+    },
+    "queue": {
+      "enqueue": "Accoda",
+      "steer": "Riorienta",
+      "interrupt_send": "Interrompi e invia",
+      "heading": "Messaggi in coda · {{count}}",
+      "paused": "In attesa · {{count}} · Invia per riprendere",
+      "edit": "Modifica",
+      "remove": "Elimina",
+      "move_up": "Sposta su",
+      "send_now": "Invia ora",
+      "draft_not_empty": "Invia o cancella la bozza attuale prima di modificare un messaggio in coda.",
+      "steer_unavailable": "Questo turno non può essere riorientato al momento. Il messaggio è stato conservato.",
+      "client_command_busy": "Attendi la fine dell’attività attuale prima di usare questo comando."
     }
   }
 }

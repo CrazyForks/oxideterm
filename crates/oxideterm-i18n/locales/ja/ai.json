@@ -530,6 +530,20 @@
       "level_high": "高（high）",
       "level_xhigh": "非常に高い（xhigh）",
       "level_max": "最大（max）"
+    },
+    "queue": {
+      "enqueue": "キューへ",
+      "steer": "方針を調整",
+      "interrupt_send": "中断して送信",
+      "heading": "送信待ち · {{count}}",
+      "paused": "保留中 · {{count}} · 送信で再開",
+      "edit": "編集",
+      "remove": "削除",
+      "move_up": "上へ",
+      "send_now": "今すぐ送信",
+      "draft_not_empty": "送信待ちのメッセージを編集する前に、現在の下書きを送信するか消去してください。",
+      "steer_unavailable": "現在のターンでは方針を調整できません。メッセージは保持されています。",
+      "client_command_busy": "このコマンドは現在のタスクが終了してから使用してください。"
     }
   }
 }

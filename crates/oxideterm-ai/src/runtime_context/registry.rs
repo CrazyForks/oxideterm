@@ -324,7 +324,9 @@ impl RuntimeCapabilityRegistry {
             ));
         };
         if !self.owner_in_scope(tool_session_id, &handle.owner_key) {
-            return Err(RuntimeValidationError::new(RuntimeValidationFailure::CapabilityUnavailable));
+            return Err(RuntimeValidationError::new(
+                RuntimeValidationFailure::CapabilityUnavailable,
+            ));
         }
         if handle.tool_session_id != *tool_session_id {
             return Err(RuntimeValidationError::new(
@@ -446,22 +448,36 @@ impl RuntimeCapabilityRegistry {
         Ok(handles)
     }
 
-    pub fn restrict_tool_session(&mut self, session: &ToolSessionId, owners: HashSet<RuntimeOwnerKey>) -> Result<(), RuntimeContextError> {
-        if !self.active_sessions.contains(session) { return Err(RuntimeContextError::ToolSessionInactive); }
+    pub fn restrict_tool_session(
+        &mut self,
+        session: &ToolSessionId,
+        owners: HashSet<RuntimeOwnerKey>,
+    ) -> Result<(), RuntimeContextError> {
+        if !self.active_sessions.contains(session) {
+            return Err(RuntimeContextError::ToolSessionInactive);
+        }
         let owners = match self.session_scopes.get(session) {
             Some(previous) => owners.intersection(previous).cloned().collect(),
             None => owners,
         };
-        self.handles.retain(|_, handle| handle.tool_session_id != *session || owners.contains(&handle.owner_key));
+        self.handles.retain(|_, handle| {
+            handle.tool_session_id != *session || owners.contains(&handle.owner_key)
+        });
         self.session_scopes.insert(session.clone(), owners);
         Ok(())
     }
 
     fn owner_in_scope(&self, session: &ToolSessionId, owner: &RuntimeOwnerKey) -> bool {
-        self.session_scopes.get(session).is_none_or(|owners| owners.contains(owner))
+        self.session_scopes
+            .get(session)
+            .is_none_or(|owners| owners.contains(owner))
     }
 
-    pub fn delegated_owner(&self, session: &ToolSessionId, handle: &RuntimeHandleId) -> Result<RuntimeOwnerKey, RuntimeValidationError> {
+    pub fn delegated_owner(
+        &self,
+        session: &ToolSessionId,
+        handle: &RuntimeHandleId,
+    ) -> Result<RuntimeOwnerKey, RuntimeValidationError> {
         self.validate_handle_projection(session, Some(handle))?;
         Ok(self.handles[handle].owner_key.clone())
     }
@@ -471,12 +487,20 @@ impl RuntimeCapabilityRegistry {
     }
 
     pub fn permits_owner(&self, session: &ToolSessionId, owner: &RuntimeOwnerKey) -> bool {
-        self.active_sessions.contains(session) && self.owners.contains_key(owner) && self.owner_in_scope(session, owner)
+        self.active_sessions.contains(session)
+            && self.owners.contains_key(owner)
+            && self.owner_in_scope(session, owner)
     }
 
     pub fn session_owners(&self, session: &ToolSessionId) -> HashSet<RuntimeOwnerKey> {
-        if !self.active_sessions.contains(session) { return HashSet::new(); }
-        self.owners.keys().filter(|key| self.owner_in_scope(session, key)).cloned().collect()
+        if !self.active_sessions.contains(session) {
+            return HashSet::new();
+        }
+        self.owners
+            .keys()
+            .filter(|key| self.owner_in_scope(session, key))
+            .cloned()
+            .collect()
     }
 
     /// Returns only leases already issued by authoritative discovery. This

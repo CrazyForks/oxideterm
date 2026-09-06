@@ -78,7 +78,9 @@ impl TerminalInputBroadcastRoute {
     fn deliver(&self, kind: TerminalBroadcastInputKind, bytes: &[u8], cx: &mut App) {
         if let Some(runtime) = self.ai_runtime.upgrade() {
             if let Some(key) = runtime.read(cx).terminal_resource_key(self.session_id) {
-                if self.agent_resources.has_owner(&key) { self.agent_resources.invalidate(&key); }
+                if self.agent_resources.has_owner(&key) {
+                    self.agent_resources.invalidate(&key);
+                }
             }
         }
         let Some(tab_host) = self.tab_host.upgrade() else {
@@ -113,10 +115,18 @@ impl TerminalInputBroadcastRoute {
             terminal.filter_broadcast_targets(candidates)
         });
         for pane_id in targets {
-            let session_id = tab_host.read(cx).tabs().iter().find_map(|tab| tab.root_pane.as_ref()?.session_id_for_pane(pane_id));
+            let session_id = tab_host
+                .read(cx)
+                .tabs()
+                .iter()
+                .find_map(|tab| tab.root_pane.as_ref()?.session_id_for_pane(pane_id));
             if let Some(runtime) = self.ai_runtime.upgrade() {
-                if let Some(key) = session_id.and_then(|id| runtime.read(cx).terminal_resource_key(id)) {
-                    if self.agent_resources.has_owner(&key) { self.agent_resources.invalidate(&key); }
+                if let Some(key) =
+                    session_id.and_then(|id| runtime.read(cx).terminal_resource_key(id))
+                {
+                    if self.agent_resources.has_owner(&key) {
+                        self.agent_resources.invalidate(&key);
+                    }
                 }
             }
             let Some(pane) = tab_host.read(cx).panes().get(&pane_id).cloned() else {

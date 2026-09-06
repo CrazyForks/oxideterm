@@ -530,6 +530,20 @@
       "level_high": "Hoch (high)",
       "level_xhigh": "Sehr hoch (xhigh)",
       "level_max": "Maximum (max)"
+    },
+    "queue": {
+      "enqueue": "Einreihen",
+      "steer": "Neu ausrichten",
+      "interrupt_send": "Abbrechen und senden",
+      "heading": "Warteschlange · {{count}}",
+      "paused": "Ausstehend · {{count}} · Zum Fortsetzen senden",
+      "edit": "Bearbeiten",
+      "remove": "Löschen",
+      "move_up": "Nach oben",
+      "send_now": "Jetzt senden",
+      "draft_not_empty": "Senden oder leeren Sie den aktuellen Entwurf, bevor Sie eine wartende Nachricht bearbeiten.",
+      "steer_unavailable": "Dieser Durchlauf kann gerade keine neue Ausrichtung annehmen. Ihre Nachricht bleibt erhalten.",
+      "client_command_busy": "Warten Sie mit diesem Befehl, bis die aktuelle Aufgabe beendet ist."
     }
   }
 }

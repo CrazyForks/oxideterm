@@ -170,26 +170,60 @@ impl AiRuntimeContextEntity {
         self.registry.is_restricted_session(session)
     }
 
-    pub(in crate::workspace) fn agent_scope(&self, session: &ToolSessionId, tools: std::collections::BTreeSet<String>) -> oxideterm_ai::agent::AgentScope {
-        oxideterm_ai::agent::AgentScope { targets: self.registry.session_owners(session), tools }
+    pub(in crate::workspace) fn agent_scope(
+        &self,
+        session: &ToolSessionId,
+        tools: std::collections::BTreeSet<String>,
+    ) -> oxideterm_ai::agent::AgentScope {
+        oxideterm_ai::agent::AgentScope {
+            targets: self.registry.session_owners(session),
+            tools,
+        }
     }
 
-    pub(in crate::workspace) fn restrict_agent_session(&mut self, session: &ToolSessionId, scope: &oxideterm_ai::agent::AgentScope) -> Result<(), oxideterm_ai::RuntimeContextError> {
-        self.registry.restrict_tool_session(session, scope.targets.clone())
+    pub(in crate::workspace) fn restrict_agent_session(
+        &mut self,
+        session: &ToolSessionId,
+        scope: &oxideterm_ai::agent::AgentScope,
+    ) -> Result<(), oxideterm_ai::RuntimeContextError> {
+        self.registry
+            .restrict_tool_session(session, scope.targets.clone())
     }
 
-    pub(in crate::workspace) fn delegated_agent_target(&self, session: &ToolSessionId, handle: &str) -> Result<(oxideterm_ai::RuntimeOwnerKey, String), oxideterm_ai::RuntimeValidationError> {
-        let handle = oxideterm_ai::RuntimeHandleId::parse(handle.to_owned()).map_err(|_| oxideterm_ai::RuntimeValidationError::new(oxideterm_ai::RuntimeValidationFailure::UnknownHandle))?;
-        let label = self.registry.validate_handle_projection(session, Some(&handle))?.label;
+    pub(in crate::workspace) fn delegated_agent_target(
+        &self,
+        session: &ToolSessionId,
+        handle: &str,
+    ) -> Result<(oxideterm_ai::RuntimeOwnerKey, String), oxideterm_ai::RuntimeValidationError> {
+        let handle = oxideterm_ai::RuntimeHandleId::parse(handle.to_owned()).map_err(|_| {
+            oxideterm_ai::RuntimeValidationError::new(
+                oxideterm_ai::RuntimeValidationFailure::UnknownHandle,
+            )
+        })?;
+        let label = self
+            .registry
+            .validate_handle_projection(session, Some(&handle))?
+            .label;
         Ok((self.registry.delegated_owner(session, &handle)?, label))
     }
 
-    pub(in crate::workspace) fn terminal_resource_key(&self, session: TerminalSessionId) -> Option<oxideterm_ai::RuntimeOwnerKey> {
-        self.terminal_owners.get(&session).map(|owner| owner.key.clone())
+    pub(in crate::workspace) fn terminal_resource_key(
+        &self,
+        session: TerminalSessionId,
+    ) -> Option<oxideterm_ai::RuntimeOwnerKey> {
+        self.terminal_owners
+            .get(&session)
+            .map(|owner| owner.key.clone())
     }
 
-    pub(in crate::workspace) fn agent_can_observe_terminal(&self, session: &ToolSessionId, terminal: TerminalSessionId) -> bool {
-        self.terminal_owners.get(&terminal).is_some_and(|owner| self.registry.permits_owner(session, &owner.key))
+    pub(in crate::workspace) fn agent_can_observe_terminal(
+        &self,
+        session: &ToolSessionId,
+        terminal: TerminalSessionId,
+    ) -> bool {
+        self.terminal_owners
+            .get(&terminal)
+            .is_some_and(|owner| self.registry.permits_owner(session, &owner.key))
     }
 
     /// Rejects work queued by a stream that has been cancelled or replaced.
@@ -874,14 +908,26 @@ mod tests {
         let child = entity.begin_tool_session(2);
         let stale = entity.issue_terminal_handle(&child, second).unwrap();
         let mut scope = oxideterm_ai::agent::AgentScope::default();
-        scope.targets.insert(entity.terminal_resource_key(first).unwrap());
+        scope
+            .targets
+            .insert(entity.terminal_resource_key(first).unwrap());
         entity.restrict_agent_session(&child, &scope).unwrap();
         assert!(entity.issue_terminal_handle(&child, first).is_ok());
         assert!(entity.issue_terminal_handle(&child, second).is_err());
         for handle in [outside, stale] {
-            assert!(entity.validate_terminal_handle(&child, Some(handle.handle_id.as_str()), oxideterm_ai::RuntimeCapability::TerminalObserve).is_err());
+            assert!(
+                entity
+                    .validate_terminal_handle(
+                        &child,
+                        Some(handle.handle_id.as_str()),
+                        oxideterm_ai::RuntimeCapability::TerminalObserve
+                    )
+                    .is_err()
+            );
         }
-        scope.targets.insert(entity.terminal_resource_key(second).unwrap());
+        scope
+            .targets
+            .insert(entity.terminal_resource_key(second).unwrap());
         entity.restrict_agent_session(&child, &scope).unwrap();
         assert!(!entity.agent_can_observe_terminal(&child, second));
         assert!(entity.is_active_tool_session(1, &parent));

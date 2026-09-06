@@ -203,11 +203,24 @@ impl AgentRuntime {
             .collect()
     }
 
-    pub fn unresolved_resources(&self, conversation_id: &str, resources: &AgentResourceCoordinator) -> Vec<crate::RuntimeOwnerKey> {
-        if !resources.has_unresolved() { return Vec::new(); }
-        self.state.lock().groups.values().flat_map(|group| group.runs.values())
+    pub fn unresolved_resources(
+        &self,
+        conversation_id: &str,
+        resources: &AgentResourceCoordinator,
+    ) -> Vec<crate::RuntimeOwnerKey> {
+        if !resources.has_unresolved() {
+            return Vec::new();
+        }
+        self.state
+            .lock()
+            .groups
+            .values()
+            .flat_map(|group| group.runs.values())
             .filter(|run| run.snapshot.conversation_id == conversation_id)
-            .flat_map(|run| resources.unresolved_owned_by(&run.snapshot.run, run.snapshot.state.is_terminal())).collect()
+            .flat_map(|run| {
+                resources.unresolved_owned_by(&run.snapshot.run, run.snapshot.state.is_terminal())
+            })
+            .collect()
     }
 
     pub fn snapshot(&self, run: &AgentRunRef) -> Result<AgentSnapshot, AgentError> {
@@ -241,7 +254,9 @@ impl AgentRuntime {
     ) -> Result<(), AgentError> {
         let mut state = self.state.lock();
         let group = current_group(&mut state, run)?;
-        if *group.runs[&run.agent_id].cancellation.borrow() { return Err(AgentError::Cancelled); }
+        if *group.runs[&run.agent_id].cancellation.borrow() {
+            return Err(AgentError::Cancelled);
+        }
         group.contexts.insert(
             run.agent_id.clone(),
             crate::sanitize_api_messages_for_provider(history),
@@ -534,10 +549,23 @@ impl AgentRuntime {
     pub fn prepare_completion(&self, run: &AgentRunRef, cursor: u64) -> Result<(), AgentError> {
         let mut state = self.state.lock();
         let group = current_group(&mut state, run)?;
-        if group.runs[&run.agent_id].closing { return Ok(()); }
+        if group.runs[&run.agent_id].closing {
+            return Ok(());
+        }
         ensure_active(group, run)?;
-        if !group.runs[&run.agent_id].inbox.is_empty() || (group.parent == run.agent_id && group.updates.iter().any(|update| update.sequence > cursor)) { return Err(AgentError::PendingMessages); }
-        if group.parent == run.agent_id && group.runs.values().any(|child| child.snapshot.parent_id.is_some() && !child.snapshot.state.is_terminal()) { return Err(AgentError::InvalidState); }
+        if !group.runs[&run.agent_id].inbox.is_empty()
+            || (group.parent == run.agent_id
+                && group.updates.iter().any(|update| update.sequence > cursor))
+        {
+            return Err(AgentError::PendingMessages);
+        }
+        if group.parent == run.agent_id
+            && group.runs.values().any(|child| {
+                child.snapshot.parent_id.is_some() && !child.snapshot.state.is_terminal()
+            })
+        {
+            return Err(AgentError::InvalidState);
+        }
         group.runs.get_mut(&run.agent_id).unwrap().closing = true;
         drop(state);
         self.changed();
@@ -727,7 +755,9 @@ impl AgentRuntime {
     pub fn begin_request(&self, run: &AgentRunRef) -> Result<usize, AgentError> {
         let mut state = self.state.lock();
         let group = current_group(&mut state, run)?;
-        if *group.runs[&run.agent_id].cancellation.borrow() { return Err(AgentError::Cancelled); }
+        if *group.runs[&run.agent_id].cancellation.borrow() {
+            return Err(AgentError::Cancelled);
+        }
         let owned = group.runs.get_mut(&run.agent_id).unwrap();
         let index = owned.requests.len();
         owned.requests.push(AgentUsage {
@@ -829,7 +859,9 @@ fn ensure_active(group: &Group, run: &AgentRunRef) -> Result<(), AgentError> {
     if *owned.cancellation.borrow() {
         return Err(AgentError::Cancelled);
     }
-    if owned.closing { return Err(AgentError::InvalidState); }
+    if owned.closing {
+        return Err(AgentError::InvalidState);
+    }
     if owned.snapshot.state.is_terminal() {
         return Err(AgentError::InvalidState);
     }

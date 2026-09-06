@@ -36,6 +36,14 @@ User input takes priority and invalidates the affected lease, including broadcas
 
 Closing the AI panel, opening child details and switching conversations do not cancel work. Stop affects the selected conversation's group; individual stop affects one child. Conversation deletion and workspace shutdown cancel their runs and revoke tool sessions, without disconnecting shared SSH nodes or unrelated SFTP and forwarding consumers.
 
+## Follow-up Messages
+
+The AI composer separates queued follow-ups, steering and interruption. Sending while a response is active queues the message for the next turn. The queue appears above the existing composer and supports editing, deletion, moving an item up and sending it immediately. Editing returns a message to an empty draft without replacing an existing draft. Queue entries retain the selected model and prepared context; switching conversations does not redirect delivery.
+
+Steering uses the current native run's mailbox and leaves its model and authority unchanged. If the run can no longer accept input, the composer or queue retains the message. Interrupt-and-send cancels the current turn and submits the replacement before other queued messages; remote commands still follow the unresolved-resource rules above. Plain Stop and failures retain pending messages for explicit continuation. Normal completion dispatches one queued turn at a time, including in background conversations.
+
+Pending messages and per-conversation drafts are workspace-owned memory, not persisted chat entries. Closing the workspace discards them and does not replay pending commands after restart. Asynchronous credential lookup, retrieval and pre-send compaction check their originating launch identity before starting a stream.
+
 ## History And Presentation
 
 The parent reply contains a collapsed task group with compact status rows and individual or group stop actions. Child details reuse the same AI panel and retain the parent's draft and scroll owner. Replies reuse the structured Markdown and tool renderers; task context, communication and history are expandable. Child code blocks do not offer terminal insertion because the currently selected terminal may belong to a different task. Tool approvals retain their originating conversation and run; notifications identify background work without navigating away from the current page.

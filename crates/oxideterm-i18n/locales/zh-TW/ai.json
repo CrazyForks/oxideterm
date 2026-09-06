@@ -530,6 +530,20 @@
       "level_high": "高（high）",
       "level_xhigh": "極高（xhigh）",
       "level_max": "最大（max）"
+    },
+    "queue": {
+      "enqueue": "排隊",
+      "steer": "調整方向",
+      "interrupt_send": "中斷並傳送",
+      "heading": "排隊訊息 · {{count}}",
+      "paused": "待傳送 · {{count}} · 點擊傳送繼續",
+      "edit": "編輯",
+      "remove": "刪除",
+      "move_up": "上移",
+      "send_now": "立即傳送",
+      "draft_not_empty": "請先傳送或清空目前草稿，再編輯排隊訊息。",
+      "steer_unavailable": "目前回合暫時無法接收調整方向的訊息，內容已保留。",
+      "client_command_busy": "請等目前任務結束後再使用此命令。"
     }
   }
 }

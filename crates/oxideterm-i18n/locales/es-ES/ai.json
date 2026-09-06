@@ -530,6 +530,20 @@
       "level_high": "Alto (high)",
       "level_xhigh": "Muy alto (xhigh)",
       "level_max": "Máximo (max)"
+    },
+    "queue": {
+      "enqueue": "Encolar",
+      "steer": "Reorientar",
+      "interrupt_send": "Interrumpir y enviar",
+      "heading": "Mensajes en cola · {{count}}",
+      "paused": "Pendientes · {{count}} · Envía para continuar",
+      "edit": "Editar",
+      "remove": "Eliminar",
+      "move_up": "Subir",
+      "send_now": "Enviar ahora",
+      "draft_not_empty": "Envía o borra el borrador actual antes de editar un mensaje en cola.",
+      "steer_unavailable": "Este turno no puede aceptar cambios de dirección ahora. El mensaje se ha conservado.",
+      "client_command_busy": "Espera a que termine la tarea actual para usar este comando."
     }
   }
 }

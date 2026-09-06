@@ -47,7 +47,10 @@ pub(crate) fn parse_openai_data_line_with_accumulator(
     let mut events = Vec::new();
     if let Ok(json) = serde_json::from_str::<Value>(data) {
         if let Some(usage) = json.get("usage") {
-            events.push(AiStreamEvent::Usage { input_tokens: usage.get("prompt_tokens").and_then(Value::as_u64), output_tokens: usage.get("completion_tokens").and_then(Value::as_u64) });
+            events.push(AiStreamEvent::Usage {
+                input_tokens: usage.get("prompt_tokens").and_then(Value::as_u64),
+                output_tokens: usage.get("completion_tokens").and_then(Value::as_u64),
+            });
         }
         let delta = json
             .get("choices")
@@ -177,7 +180,10 @@ pub(crate) fn parse_openai_json_events(body: &str, context: &str) -> Result<Vec<
         }
     }
     if let Some(usage) = json.get("usage") {
-        events.push(AiStreamEvent::Usage { input_tokens: usage.get("prompt_tokens").and_then(Value::as_u64), output_tokens: usage.get("completion_tokens").and_then(Value::as_u64) });
+        events.push(AiStreamEvent::Usage {
+            input_tokens: usage.get("prompt_tokens").and_then(Value::as_u64),
+            output_tokens: usage.get("completion_tokens").and_then(Value::as_u64),
+        });
     }
     Ok(events)
 }

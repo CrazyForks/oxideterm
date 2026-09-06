@@ -294,6 +294,13 @@ impl WorkspaceApp {
         let Some(pending) = resume_after else {
             return;
         };
+        if !self
+            .ai_entity
+            .read(cx)
+            .chat_launch_matches(&pending.conversation_id, pending.launch_id.as_deref())
+        {
+            return;
+        }
         self.start_ai_chat_stream_after_budget_preflight(
             pending.conversation_id,
             pending.config,

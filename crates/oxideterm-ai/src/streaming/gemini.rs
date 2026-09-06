@@ -281,7 +281,20 @@ pub(crate) fn parse_gemini_data_line(line: &str) -> ParsedStreamLine {
     let mut events = Vec::new();
     if let Ok(json) = serde_json::from_str::<Value>(data) {
         if let Some(usage) = json.get("usageMetadata") {
-            events.push(AiStreamEvent::Usage { input_tokens: usage.get("promptTokenCount").and_then(Value::as_u64), output_tokens: usage.get("candidatesTokenCount").and_then(Value::as_u64).map(|tokens| tokens.saturating_add(usage.get("thoughtsTokenCount").and_then(Value::as_u64).unwrap_or(0))) });
+            events.push(AiStreamEvent::Usage {
+                input_tokens: usage.get("promptTokenCount").and_then(Value::as_u64),
+                output_tokens: usage
+                    .get("candidatesTokenCount")
+                    .and_then(Value::as_u64)
+                    .map(|tokens| {
+                        tokens.saturating_add(
+                            usage
+                                .get("thoughtsTokenCount")
+                                .and_then(Value::as_u64)
+                                .unwrap_or(0),
+                        )
+                    }),
+            });
         }
         if let Some(parts) = json
             .get("candidates")
@@ -290,46 +303,46 @@ pub(crate) fn parse_gemini_data_line(line: &str) -> ParsedStreamLine {
             .and_then(|candidate| candidate.get("content"))
             .and_then(|content| content.get("parts"))
             .and_then(Value::as_array)
-    {
-        for part in parts {
-            // Gemini attaches thoughtSignature to the part itself. Forward the
-            // complete part before projecting its visible text or tool call.
-            events.push(AiStreamEvent::ProviderResponsePart {
-                provider_type: "gemini".to_string(),
-                part: part.clone(),
-            });
-            if let Some(text) = part
-                .get("text")
-                .and_then(Value::as_str)
-                .filter(|text| !text.is_empty())
-            {
-                events.push(AiStreamEvent::Content(text.to_string()));
-            }
-            if let Some(function_call) = part.get("functionCall") {
-                let id = format!(
-                    "gemini-{}",
-                    GEMINI_TOOL_CALL_COUNTER.fetch_add(1, Ordering::Relaxed)
-                );
-                let name = function_call
-                    .get("name")
-                    .and_then(Value::as_str)
-                    .unwrap_or("unknown")
-                    .to_string();
-                let arguments = function_call
-                    .get("args")
-                    .filter(|args| gemini_js_truthy(args))
-                    .cloned()
-                    .unwrap_or_else(|| serde_json::json!({}))
-                    .to_string();
-                events.push(AiStreamEvent::ToolCallComplete {
-                    id,
-                    name,
-                    arguments,
+        {
+            for part in parts {
+                // Gemini attaches thoughtSignature to the part itself. Forward the
+                // complete part before projecting its visible text or tool call.
+                events.push(AiStreamEvent::ProviderResponsePart {
+                    provider_type: "gemini".to_string(),
+                    part: part.clone(),
                 });
+                if let Some(text) = part
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .filter(|text| !text.is_empty())
+                {
+                    events.push(AiStreamEvent::Content(text.to_string()));
+                }
+                if let Some(function_call) = part.get("functionCall") {
+                    let id = format!(
+                        "gemini-{}",
+                        GEMINI_TOOL_CALL_COUNTER.fetch_add(1, Ordering::Relaxed)
+                    );
+                    let name = function_call
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .unwrap_or("unknown")
+                        .to_string();
+                    let arguments = function_call
+                        .get("args")
+                        .filter(|args| gemini_js_truthy(args))
+                        .cloned()
+                        .unwrap_or_else(|| serde_json::json!({}))
+                        .to_string();
+                    events.push(AiStreamEvent::ToolCallComplete {
+                        id,
+                        name,
+                        arguments,
+                    });
+                }
             }
         }
     }
-        }
     ParsedStreamLine {
         events,
         saw_frame: true,

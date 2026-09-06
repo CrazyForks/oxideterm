@@ -306,7 +306,7 @@ impl WorkspaceApp {
                     }
                     true
                 }
-                "enter" if !event.keystroke.modifiers.shift && (!self.ai_entity.read(cx).chat_is_loading() || self.ai_entity.read(cx).can_supplement_agent()) => {
+                "enter" if !event.keystroke.modifiers.shift => {
                     self.send_ai_chat_draft(cx);
                     true
                 }
@@ -345,7 +345,6 @@ impl WorkspaceApp {
         cx: &mut Context<Self>,
     ) {
         match action {
-            AiChatFooterAction::Submit if self.ai_entity.read(cx).chat_is_loading() && !self.ai_entity.read(cx).can_supplement_agent() => self.cancel_ai_chat_stream(cx),
             AiChatFooterAction::Submit if !self.ai_entity.read(cx).chat_ui().draft.trim().is_empty() => {
                 self.send_ai_chat_draft(cx)
             }

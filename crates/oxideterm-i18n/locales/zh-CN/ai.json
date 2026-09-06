@@ -530,6 +530,20 @@
       "level_high": "高（high）",
       "level_xhigh": "极高（xhigh）",
       "level_max": "最大（max）"
+    },
+    "queue": {
+      "enqueue": "排队",
+      "steer": "调整方向",
+      "interrupt_send": "打断并发送",
+      "heading": "排队消息 · {{count}}",
+      "paused": "待发送 · {{count}} · 点击发送继续",
+      "edit": "编辑",
+      "remove": "删除",
+      "move_up": "上移",
+      "send_now": "立即发送",
+      "draft_not_empty": "请先发送或清空当前草稿，再编辑排队消息。",
+      "steer_unavailable": "当前轮暂时无法接收调整方向的消息，内容已保留。",
+      "client_command_busy": "请等当前任务结束后再使用此命令。"
     }
   }
 }

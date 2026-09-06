@@ -339,6 +339,12 @@ impl WorkspaceApp {
             return;
         };
 
+        let launch = self
+            .ai_entity
+            .read(cx)
+            .chat_launches
+            .get(&conversation_id)
+            .cloned();
         let services = self.ai_model_backend_services(cx);
         let (rag_tx, rag_rx) = std::sync::mpsc::channel();
         self.forwarding_runtime.spawn(async move {
@@ -366,6 +372,13 @@ impl WorkspaceApp {
                 return;
             };
             let _ = weak.update(cx, |this, cx| {
+                if !this
+                    .ai_entity
+                    .read(cx)
+                    .chat_launch_matches(&conversation_id, launch.as_deref())
+                {
+                    return;
+                }
                 this.start_ai_chat_stream_after_budget_preflight(
                     conversation_id,
                     config,
@@ -402,6 +415,12 @@ impl WorkspaceApp {
             )
         {
             let pending = AiPendingChatStream {
+                launch_id: self
+                    .ai_entity
+                    .read(cx)
+                    .chat_launches
+                    .get(&conversation_id)
+                    .cloned(),
                 conversation_id: conversation_id.clone(),
                 config,
                 request_content,

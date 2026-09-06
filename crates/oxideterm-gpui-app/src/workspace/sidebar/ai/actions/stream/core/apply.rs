@@ -471,7 +471,9 @@ impl WorkspaceApp {
                     "complete",
                     cx,
                 );
-                self.maybe_start_ai_auto_compaction(conversation_id, cx);
+                if !self.send_next_queued_ai_message(conversation_id, cx) {
+                    self.maybe_start_ai_auto_compaction(conversation_id, cx);
+                }
             }
             AiStreamApplyOutcome::Failed(safe_error) => {
                 self.ai_runtime_context.update(cx, |runtime, _cx| {

@@ -325,8 +325,14 @@ pub(crate) fn parse_anthropic_data_line_with_accumulator(
 
     let mut events = Vec::new();
     if let Ok(json) = serde_json::from_str::<Value>(data) {
-        if let Some(usage) = json.get("usage").or_else(|| json.get("message").and_then(|message| message.get("usage"))) {
-            events.push(AiStreamEvent::Usage { input_tokens: usage.get("input_tokens").and_then(Value::as_u64), output_tokens: usage.get("output_tokens").and_then(Value::as_u64) });
+        if let Some(usage) = json
+            .get("usage")
+            .or_else(|| json.get("message").and_then(|message| message.get("usage")))
+        {
+            events.push(AiStreamEvent::Usage {
+                input_tokens: usage.get("input_tokens").and_then(Value::as_u64),
+                output_tokens: usage.get("output_tokens").and_then(Value::as_u64),
+            });
         }
         match json.get("type").and_then(Value::as_str) {
             Some("content_block_start") => {

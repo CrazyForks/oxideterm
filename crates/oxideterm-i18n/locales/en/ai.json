@@ -530,6 +530,20 @@
       "level_high": "High",
       "level_xhigh": "XHigh",
       "level_max": "Max"
+    },
+    "queue": {
+      "enqueue": "Queue",
+      "steer": "Steer",
+      "interrupt_send": "Interrupt and send",
+      "heading": "Queued messages · {{count}}",
+      "paused": "Pending messages · {{count}} · Send to resume",
+      "edit": "Edit",
+      "remove": "Delete",
+      "move_up": "Move up",
+      "send_now": "Send now",
+      "draft_not_empty": "Send or clear the current draft before editing a queued message.",
+      "steer_unavailable": "This turn cannot accept steering right now. Your message has been kept.",
+      "client_command_busy": "Wait for the current task to finish before using this command."
     }
   }
 }
