@@ -279,8 +279,11 @@ pub(crate) fn parse_gemini_data_line(line: &str) -> ParsedStreamLine {
     }
 
     let mut events = Vec::new();
-    if let Ok(json) = serde_json::from_str::<Value>(data)
-        && let Some(parts) = json
+    if let Ok(json) = serde_json::from_str::<Value>(data) {
+        if let Some(usage) = json.get("usageMetadata") {
+            events.push(AiStreamEvent::Usage { input_tokens: usage.get("promptTokenCount").and_then(Value::as_u64), output_tokens: usage.get("candidatesTokenCount").and_then(Value::as_u64).map(|tokens| tokens.saturating_add(usage.get("thoughtsTokenCount").and_then(Value::as_u64).unwrap_or(0))) });
+        }
+        if let Some(parts) = json
             .get("candidates")
             .and_then(Value::as_array)
             .and_then(|candidates| candidates.first())
@@ -326,6 +329,7 @@ pub(crate) fn parse_gemini_data_line(line: &str) -> ParsedStreamLine {
             }
         }
     }
+        }
     ParsedStreamLine {
         events,
         saw_frame: true,

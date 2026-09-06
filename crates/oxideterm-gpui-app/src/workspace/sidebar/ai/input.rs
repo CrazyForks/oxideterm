@@ -180,7 +180,8 @@ window.focus(&this.focus_handle, cx);
         let send_disabled = !enabled || !model_selected || self.ai_entity.read(cx).chat_ui().draft.trim().is_empty();
         let action_focused = self.ai_entity.read(cx).chat_ui().footer_focus == Some(AiChatFooterAction::Submit)
             && (self.ai_entity.read(cx).chat_is_loading() || !send_disabled);
-        let action = if self.ai_entity.read(cx).chat_is_loading() {
+        let can_supplement = self.ai_entity.read(cx).can_supplement_agent();
+        let action = if self.ai_entity.read(cx).chat_is_loading() && !can_supplement {
             ai_stop_button(
                 &self.tokens,
                 self.i18n.t("ai.input.stop"),
@@ -190,7 +191,7 @@ window.focus(&this.focus_handle, cx);
         } else {
             ai_send_button(
                 &self.tokens,
-                self.i18n.t("ai.input.send_btn"),
+                self.i18n.t(if can_supplement { "ai.agents.supplement" } else { "ai.input.send_btn" }),
                 send_disabled,
                 action_focused,
             )
@@ -228,6 +229,14 @@ window.focus(&this.focus_handle, cx);
             .flex()
             .items_center()
             .gap(px(6.0))
+            .when(can_supplement, |row| {
+                row.child(self.agent_control(
+                    "ai-stop-running-group".into(), self.i18n.t("ai.input.stop"),
+                    ai_stop_button(&self.tokens, self.i18n.t("ai.input.stop"),
+                        Self::render_lucide_icon(LucideIcon::StopCircle, 12.0, rgb(self.tokens.ui.error)), false),
+                    |this, _, cx| this.cancel_ai_chat_stream(cx), cx,
+                ))
+            })
             .when(!self.ai_entity.read(cx).chat_is_loading(), |row| {
                 row.child(
                     div()
@@ -242,7 +251,7 @@ window.focus(&this.focus_handle, cx);
                     this.ai_entity.update(cx, |ai, _cx| {
                         ai.clear_chat_footer_focus();
                     });
-                    if this.ai_entity.read(cx).chat_is_loading() {
+                    if this.ai_entity.read(cx).chat_is_loading() && !this.ai_entity.read(cx).can_supplement_agent() {
                         this.cancel_ai_chat_stream(cx);
                     } else if !send_disabled {
                         this.send_ai_chat_draft(cx);

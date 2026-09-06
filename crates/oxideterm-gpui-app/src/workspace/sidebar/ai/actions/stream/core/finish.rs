@@ -315,7 +315,7 @@ impl WorkspaceApp {
     ) {
         self.ai_entity
             .update(cx, |ai, _cx| ai.finish_compaction(&conversation_id));
-        self.ai_entity.update(cx, |ai, _cx| ai.set_chat_loading(false));
+        self.ai_entity.update(cx, |ai, _cx| ai.set_conversation_loading(&conversation_id, false));
         if failed {
             self.push_ai_settings_toast(
                 self.i18n.t("settings_view.ai.acp_agent_error_unknown"),

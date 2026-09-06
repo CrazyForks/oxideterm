@@ -2089,7 +2089,7 @@ pub(in crate::workspace) fn make_ai_state_version(
         .join(":")
 }
 
-pub(in crate::workspace) async fn execute_ai_tool(
+async fn execute_ai_tool_uncoordinated(
     services: &AiModelBackendServices,
     ui_tx: &AiStreamDeliverySender,
     generation: u64,
@@ -2101,6 +2101,7 @@ pub(in crate::workspace) async fn execute_ai_tool(
     args: serde_json::Value,
     post_user_approval: bool,
     dangerous_command_approved: bool,
+    leases: Vec<oxideterm_ai::agent::AgentToolLease>,
 ) -> AiExecutedToolResult {
     if ai_rejects_legacy_live_target_argument(&tool_name, &args) {
         return rejected_ai_tool_result(
@@ -2118,6 +2119,7 @@ pub(in crate::workspace) async fn execute_ai_tool(
             conversation_id,
             assistant_id,
             AiStreamDeliveryEvent::ToolExecutionRequested {
+                leases,
                 tool_session_id: tool_session_id.clone(),
                 tool_call_id: tool_call_id.clone(),
                 name: tool_name.clone(),

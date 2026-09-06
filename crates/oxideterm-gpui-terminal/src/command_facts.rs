@@ -205,6 +205,10 @@ impl CommandFactLedger {
         self.ai_records.clone()
     }
 
+    pub(crate) fn ai_command_status(&self, id: &str) -> Option<TerminalCommandFactStatus> {
+        self.ai_records.iter().rev().find(|record| record.command_id == id).map(|record| record.status)
+    }
+
     pub(crate) fn autosuggest_records(&self) -> Vec<TerminalAutosuggestCommandRecord> {
         self.autosuggest_records.clone()
     }

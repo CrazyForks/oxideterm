@@ -376,6 +376,20 @@ impl WorkspaceApp {
             cx.notify();
             return;
         }
+        if self.ai_entity.read(cx).can_supplement_agent() {
+            let sent = self.ai_entity.update(cx, |ai, _cx| {
+                if ai.supplement_agent(&content).is_err() { return false; }
+                if let Some(id) = ai.conversation_state().active_conversation_id.clone() {
+                    ai.conversation_state_mut().add_message(&id, agent_chat_message(AiChatRole::User, content.clone()));
+                }
+                ai.set_chat_draft(String::new());
+                ai.persist_chat_state();
+                true
+            });
+            if !sent { self.push_ai_settings_toast(self.i18n.t("ai.agents.message_not_sent"), TerminalNoticeVariant::Warning, cx); }
+            cx.notify();
+            return;
+        }
         if !self.settings_store.settings().ai.enabled {
             self.push_ai_settings_toast(
                 self.i18n.t("ai.chat.disabled_message"),

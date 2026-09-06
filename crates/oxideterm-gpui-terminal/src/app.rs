@@ -1426,6 +1426,10 @@ impl TerminalPane {
         self.command_fact_ledger.ai_records()
     }
 
+    pub fn ai_command_status(&self, id: &str) -> Option<crate::TerminalCommandFactStatus> {
+        self.command_fact_ledger.ai_command_status(id)
+    }
+
     pub fn autosuggest_command_records(&self) -> Vec<TerminalAutosuggestCommandRecord> {
         self.command_fact_ledger.autosuggest_records()
     }

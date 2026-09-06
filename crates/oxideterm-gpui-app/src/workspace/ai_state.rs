@@ -8,6 +8,7 @@ use oxideterm_settings_model::{
 };
 
 pub(in crate::workspace) mod knowledge;
+pub(in crate::workspace) mod agents;
 
 pub(in crate::workspace) enum AiChatInitializationOutcome {
     AlreadyInitialized,
@@ -321,7 +322,8 @@ pub(in crate::workspace) struct AiWorkspaceEntity {
     terminal_inline_rx: std::sync::mpsc::Receiver<AiTerminalInlineDelivery>,
     terminal_inline_stream_task: Option<tokio::task::JoinHandle<()>>,
     chat_stream_generation: u64,
-    chat_stream_task: Option<tokio::task::JoinHandle<()>>,
+    chat_stream_runs: HashMap<u64, AiChatStreamRun>,
+    pub(in crate::workspace) agents: agents::AiAgentWorkspace,
     chat_stream_tx: AiStreamDeliverySender,
     chat_stream_rx: std::sync::mpsc::Receiver<AiStreamDelivery>,
     chat_stream_deliveries: VecDeque<AiStreamDelivery>,
@@ -330,11 +332,12 @@ pub(in crate::workspace) struct AiWorkspaceEntity {
     chat_initialized: bool,
     chat_initialization_error: Option<AiChatInitializationError>,
     safety_modes_by_conversation: HashMap<String, oxideterm_gpui_ui::ai::AiSafetyMode>,
-    chat_loading: bool,
+    loading_conversations: HashSet<String>,
     next_chat_sequence: u64,
-    pending_tool_approvals: HashMap<String, tokio::sync::oneshot::Sender<bool>>,
-    pending_acp_permission_choices: HashMap<String, tokio::sync::oneshot::Sender<Option<String>>>,
-    pending_tool_candidate_selections: HashMap<String, tokio::sync::oneshot::Sender<Option<usize>>>,
+    pending_tool_approvals: HashMap<(u64, String), tokio::sync::oneshot::Sender<bool>>,
+    pending_acp_permission_choices: HashMap<(u64, String), tokio::sync::oneshot::Sender<Option<String>>>,
+    pending_tool_candidate_selections: HashMap<(u64, String), tokio::sync::oneshot::Sender<Option<usize>>>,
+    pending_tool_candidate_counts: HashMap<(u64, String), usize>,
     // Runtime evidence transitions are implemented beside stream application,
     // but these collections remain physically owned by this Entity.
     pub(in crate::workspace) tool_execution_records: VecDeque<AiToolExecutionRecord>,
@@ -346,6 +349,14 @@ pub(in crate::workspace) struct AiWorkspaceEntity {
     compaction_deliveries: VecDeque<AiCompactionDelivery>,
     compacting_conversations: HashSet<String>,
     compaction_notice: Option<AiCompactionNotice>,
+}
+
+struct AiChatStreamRun {
+    conversation_id: String,
+    assistant_id: String,
+    agent: Option<oxideterm_ai::agent::AgentRunRef>,
+    child: bool,
+    task: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl AiWorkspaceEntity {
@@ -1011,7 +1022,7 @@ impl AiWorkspaceEntity {
         let (compaction_tx, compaction_rx) =
             crate::workspace::delivery::ActiveDeliverySender::channel();
         let mcp_registry = oxideterm_ai::McpRegistry::new(key_store.clone());
-        let entity = Self {
+        let mut entity = Self {
             task_runtime,
             model_ui: AiModelWorkspaceState::new(),
             chat_ui: AiChatWorkspaceState::new(360.0, None),
@@ -1078,7 +1089,8 @@ impl AiWorkspaceEntity {
             terminal_inline_rx,
             terminal_inline_stream_task: None,
             chat_stream_generation: 0,
-            chat_stream_task: None,
+            chat_stream_runs: HashMap::new(),
+            agents: agents::AiAgentWorkspace::new(cx.default_global::<agents::AiAgentServices>().clone()),
             chat_stream_tx,
             chat_stream_rx,
             chat_stream_deliveries: VecDeque::new(),
@@ -1087,11 +1099,12 @@ impl AiWorkspaceEntity {
             chat_initialized: false,
             chat_initialization_error: None,
             safety_modes_by_conversation: HashMap::new(),
-            chat_loading: false,
+            loading_conversations: HashSet::new(),
             next_chat_sequence: 0,
             pending_tool_approvals: HashMap::new(),
             pending_acp_permission_choices: HashMap::new(),
             pending_tool_candidate_selections: HashMap::new(),
+            pending_tool_candidate_counts: HashMap::new(),
             tool_execution_records: VecDeque::new(),
             tool_result_facts: VecDeque::new(),
             agent_fs,
@@ -1103,6 +1116,7 @@ impl AiWorkspaceEntity {
             compaction_notice: None,
         };
         entity.schedule_model_refresh_delivery(cx);
+        entity.schedule_agent_updates(cx);
         entity.schedule_provider_key_status_delivery(cx);
         entity.schedule_selector_probe_delivery(cx);
         entity.schedule_acp_agent_probe_delivery(cx);
@@ -1501,6 +1515,16 @@ impl AiWorkspaceEntity {
         message_id: &str,
         update: impl FnOnce(&mut oxideterm_ai::AiChatMessage),
     ) {
+        if let Some(run_id) = self.agents.message_runs.get(message_id).cloned() {
+            if let Some(record) = self.agents.records.get_mut(&run_id) {
+                if let Some(message) = record.messages.iter_mut().find(|message| message.id == message_id) {
+                    update(message);
+                    record.revision = oxideterm_ai::AiChatPersistenceStore::next_projection_persist_at();
+                    self.agents.dirty.borrow_mut().insert(run_id);
+                }
+            }
+            return;
+        }
         // Streaming changes one assistant message at a time. Invalidate only
         // that row so long histories are not rehashed for every token.
         self.chat_ui
@@ -1512,11 +1536,13 @@ impl AiWorkspaceEntity {
     }
 
     pub(in crate::workspace) fn chat_is_loading(&self) -> bool {
-        self.chat_loading
+        self.conversation_state.active_conversation_id.as_ref().is_some_and(|id| self.loading_conversations.contains(id))
     }
 
     pub(in crate::workspace) fn set_chat_loading(&mut self, loading: bool) {
-        self.chat_loading = loading;
+        if let Some(id) = self.conversation_state.active_conversation_id.clone() {
+            self.set_conversation_loading(&id, loading);
+        }
     }
 
     pub(in crate::workspace) fn chat_initialization_error(
@@ -1564,6 +1590,7 @@ impl AiWorkspaceEntity {
             Ok((store, state)) => {
                 self.persistence_store = Some(store);
                 self.conversation_state = state;
+                if let Some(id) = self.conversation_state.active_conversation_id.clone() { self.load_agent_summaries(&id); }
                 self.chat_initialization_error = None;
                 AiChatInitializationOutcome::Loaded
             }
@@ -1579,6 +1606,8 @@ impl AiWorkspaceEntity {
     }
 
     pub(in crate::workspace) fn select_conversation(&mut self, id: String) {
+        self.agents.detail = None;
+        self.load_agent_summaries(&id);
         // Selecting can reload a previously unloaded conversation with the same
         // identifier, so identity comparison alone cannot prove cached rows valid.
         self.chat_ui
@@ -1596,7 +1625,7 @@ impl AiWorkspaceEntity {
                     .iter()
                     .position(|conversation| conversation.id == previous)
             });
-        if let Some(previous_index) = previous_index {
+        if let Some(previous_index) = previous_index.filter(|index| !self.loading_conversations.contains(&self.conversation_state.conversations[*index].id)) {
             let previous = &mut self.conversation_state.conversations[previous_index];
             previous.messages.clear();
             previous.messages_loaded = false;
@@ -1621,6 +1650,16 @@ impl AiWorkspaceEntity {
     }
 
     pub(in crate::workspace) fn delete_conversation(&mut self, id: &str) -> bool {
+        self.agents.services.runtime.remove_conversation(id);
+        let removed: HashSet<_> = self.agents.records.values().filter(|record| record.snapshot.conversation_id == id).map(|record| record.snapshot.run.run_id.clone()).collect();
+        self.agents.records.retain(|run, _| !removed.contains(run));
+        self.agents.message_runs.retain(|_, run| !removed.contains(run));
+        self.agents.details_loaded.retain(|run| !removed.contains(run));
+        self.agents.details_loading.retain(|run| !removed.contains(run));
+        self.agents.detail_errors.retain(|run| !removed.contains(run));
+        self.agents.detail_scroll.retain(|run, _| !removed.contains(run));
+        self.agents.dirty.borrow_mut().retain(|run| !removed.contains(run));
+        if self.agents.detail.as_ref().is_some_and(|run| removed.contains(run)) { self.agents.detail = None; }
         self.conversation_state.delete_conversation(id);
         self.safety_modes_by_conversation.remove(id);
         if self.chat_ui.renaming_conversation_id.as_deref() == Some(id) {
@@ -1670,6 +1709,7 @@ impl AiWorkspaceEntity {
         // The blocking persistence task needs an owned point-in-time projection.
         // Keep this as the only full conversation-state clone at the boundary.
         let state = self.conversation_state.clone();
+        let agent_records: Vec<_> = self.agents.details_loaded.iter().filter_map(|id| self.agents.records.get(id).cloned()).collect();
         let projection_updated_at =
             oxideterm_ai::AiChatPersistenceStore::next_projection_persist_at();
         self.task_runtime.spawn_blocking(move || {
@@ -1679,7 +1719,9 @@ impl AiWorkspaceEntity {
             {
                 // Persistence errors may include local paths or serialized data.
                 eprintln!("[AiChatStore] Failed to persist conversation");
+                return;
             }
+            if store.save_agent_records(agent_records).is_err() { eprintln!("[AiChatStore] Failed to persist agent records"); }
         });
     }
 
@@ -1733,7 +1775,7 @@ impl AiWorkspaceEntity {
         Option<String>,
         Vec<oxideterm_ai::stream_state::AiStoppedAssistantTurn>,
     ) {
-        self.chat_loading = false;
+        self.set_chat_loading(false);
         // Cancellation finalizes streaming messages in place rather than through
         // update_chat_message, so their list signatures must be recomputed.
         self.chat_ui
@@ -3087,6 +3129,7 @@ impl AiWorkspaceEntity {
                             break;
                         }
                         oxideterm_ai::AiStreamEvent::Thinking(_)
+                        | oxideterm_ai::AiStreamEvent::Usage { .. }
                         | oxideterm_ai::AiStreamEvent::ProviderResponsePart { .. }
                         | oxideterm_ai::AiStreamEvent::ToolCall { .. }
                         | oxideterm_ai::AiStreamEvent::ToolCallComplete { .. } => {}
@@ -3160,66 +3203,110 @@ impl AiWorkspaceEntity {
     }
 
     pub(in crate::workspace) fn chat_stream_generation(&self) -> u64 {
-        self.chat_stream_generation
+        self.conversation_state.active_conversation_id.as_deref()
+            .and_then(|id| self.chat_stream_runs.iter().find(|(_, run)| run.conversation_id == id && !run.child).map(|(generation, _)| *generation))
+            .unwrap_or(self.chat_stream_generation)
     }
 
     pub(in crate::workspace) fn is_chat_stream_generation(&self, generation: u64) -> bool {
-        self.chat_stream_generation == generation
+        self.chat_stream_runs.contains_key(&generation)
     }
 
-    pub(in crate::workspace) fn begin_chat_stream(&mut self) -> (u64, AiStreamDeliverySender) {
-        self.reject_all_tool_interactions();
-        if let Some(task) = self.chat_stream_task.take() {
-            task.abort();
-        }
-        self.chat_stream_generation = self.chat_stream_generation.saturating_add(1);
+    pub(in crate::workspace) fn chat_stream_matches(&self, generation: u64, conversation_id: &str, assistant_id: &str) -> bool {
+        self.chat_stream_runs.get(&generation).is_some_and(|run| run.conversation_id == conversation_id && run.assistant_id == assistant_id)
+    }
+
+    pub(in crate::workspace) fn conversation_stream_generations(&self, conversation_id: &str) -> Vec<u64> {
+        self.chat_stream_runs.iter().filter(|(_, run)| run.conversation_id == conversation_id).map(|(generation, _)| *generation).collect()
+    }
+
+    pub(in crate::workspace) fn set_conversation_loading(&mut self, conversation_id: &str, loading: bool) {
+        if loading { self.loading_conversations.insert(conversation_id.to_owned()); }
+        else { self.loading_conversations.remove(conversation_id); }
+    }
+
+    pub(in crate::workspace) fn begin_chat_stream(&mut self, conversation_id: String, assistant_id: String) -> (u64, AiStreamDeliverySender) {
+        self.cancel_chat_stream_for(&conversation_id);
+        self.allocate_chat_stream(conversation_id, assistant_id, None)
+    }
+
+    pub(in crate::workspace) fn allocate_chat_stream(&mut self, conversation_id: String, assistant_id: String, agent: Option<oxideterm_ai::agent::AgentRunRef>) -> (u64, AiStreamDeliverySender) {
+        self.chat_stream_generation = self.chat_stream_generation.checked_add(1).expect("chat stream identity exhausted");
+        self.chat_stream_runs.insert(self.chat_stream_generation, AiChatStreamRun { conversation_id, assistant_id, child: agent.is_some(), agent, task: None });
         (self.chat_stream_generation, self.chat_stream_tx.clone())
     }
 
-    pub(in crate::workspace) fn enqueue_chat_stream_delivery(
-        &self,
-        delivery: AiStreamDelivery,
-    ) -> bool {
-        // External runtime entities use the same bounded, generation-guarded
-        // delivery path without placing their ownership inside this entity.
+    pub(in crate::workspace) fn enqueue_chat_stream_delivery(&self, delivery: AiStreamDelivery) -> bool {
         self.chat_stream_tx.send(delivery).is_ok()
     }
 
-    pub(in crate::workspace) fn set_chat_stream_task(
-        &mut self,
-        generation: u64,
-        task: tokio::task::JoinHandle<()>,
-    ) {
-        if generation == self.chat_stream_generation {
-            if let Some(replaced_task) = self.chat_stream_task.replace(task) {
-                replaced_task.abort();
-            }
-        } else {
-            task.abort();
-        }
+    pub(in crate::workspace) fn set_chat_stream_task(&mut self, generation: u64, task: tokio::task::JoinHandle<()>) {
+        if let Some(run) = self.chat_stream_runs.get_mut(&generation) {
+            if let Some(replaced) = run.task.replace(task) { replaced.abort(); }
+        } else { task.abort(); }
     }
 
     pub(in crate::workspace) fn cancel_chat_stream(&mut self) -> u64 {
-        self.reject_all_tool_interactions();
-        if let Some(task) = self.chat_stream_task.take() {
-            task.abort();
+        if let Some(id) = self.conversation_state.active_conversation_id.clone() {
+            self.cancel_chat_stream_for(&id);
         }
-        self.chat_stream_generation = self.chat_stream_generation.saturating_add(1);
         self.chat_stream_generation
     }
 
+    pub(in crate::workspace) fn cancel_chat_stream_for(&mut self, conversation_id: &str) {
+        let mut runs: Vec<_> = self.chat_stream_runs.values().filter(|stream| stream.conversation_id == conversation_id).filter_map(|stream| stream.agent.clone().map(|run| (stream.child, run))).collect();
+        for (child, run) in &runs { if !child { let _ = self.agents.services.runtime.cancel_group(run); } }
+        runs.sort_by_key(|(child, _)| !*child);
+        for generation in self.conversation_stream_generations(conversation_id) {
+            self.complete_chat_stream(generation);
+        }
+        for (child, run) in runs {
+            let _ = self.agents.services.runtime.complete(&run, oxideterm_ai::agent::AgentResult {
+                summary: oxideterm_ai::agent::AgentText::default(), evidence: Vec::new(), actions: Vec::new(), unfinished: Vec::new(), error_code: Some("agent_cancelled".into()),
+            });
+            if !child { let _ = self.agents.services.runtime.finish_group(&run); }
+        }
+        for record in self.agents.records.values_mut().filter(|record| record.snapshot.conversation_id == conversation_id) {
+            for message in &mut record.messages {
+                message.is_streaming = false;
+                for call in &mut message.tool_calls {
+                    if matches!(call.get("status").and_then(serde_json::Value::as_str), Some("running" | "pending" | "pending_user_approval")) { call["status"] = serde_json::json!("cancelled"); }
+                }
+            }
+        }
+        self.agents.tool_leases.retain(|_, leases| !leases.iter().any(|lease| self.agents.services.runtime.snapshots(conversation_id).iter().any(|snapshot| snapshot.run == lease.lease().owner)));
+        self.set_conversation_loading(conversation_id, false);
+        self.agents.groups.retain(|_, group| self.agents.services.runtime.snapshot(&group.parent).is_ok_and(|snapshot| snapshot.conversation_id != conversation_id));
+        self.refresh_agent_records();
+    }
+
     pub(in crate::workspace) fn complete_chat_stream(&mut self, generation: u64) -> bool {
-        if generation != self.chat_stream_generation {
-            return false;
-        }
-        self.reject_all_tool_interactions();
-        // Invalidate any delivery queued after the terminal event, matching the
-        // old one-shot receiver lifetime without keeping a receiver on the root.
-        if let Some(task) = self.chat_stream_task.take() {
-            task.abort();
-        }
-        self.chat_stream_generation = self.chat_stream_generation.saturating_add(1);
+        let Some(run) = self.chat_stream_runs.remove(&generation) else { return false; };
+        if let Some(task) = run.task { task.abort(); }
+        self.reject_run_tool_interactions(generation);
         true
+    }
+
+    fn reject_run_tool_interactions(&mut self, generation: u64) {
+        let approvals: Vec<_> = self.pending_tool_approvals.keys().filter(|(run, _)| *run == generation).cloned().collect();
+        for key in approvals {
+            if let Some(sender) = self.pending_tool_approvals.remove(&key) { let _ = sender.send(false); }
+        }
+        let choices: Vec<_> = self.pending_acp_permission_choices.keys().filter(|(run, _)| *run == generation).cloned().collect();
+        for key in choices {
+            if let Some(sender) = self.pending_acp_permission_choices.remove(&key) { let _ = sender.send(None); }
+        }
+        let candidates: Vec<_> = self.pending_tool_candidate_selections.keys().filter(|(run, _)| *run == generation).cloned().collect();
+        for key in candidates {
+            self.pending_tool_candidate_counts.remove(&key);
+            if let Some(sender) = self.pending_tool_candidate_selections.remove(&key) { let _ = sender.send(None); }
+        }
+        if self.chat_ui.tool_candidate_selection.as_ref().is_some_and(|selection| selection.generation == generation) {
+            if let Some(selection) = self.chat_ui.tool_candidate_selection.take() {
+                self.chat_ui.input_focused = selection.input_was_focused;
+                self.chat_ui.footer_focus = selection.footer_focus;
+            }
+        }
     }
 
     pub(in crate::workspace) fn register_tool_approval(
@@ -3228,11 +3315,11 @@ impl AiWorkspaceEntity {
         tool_call_id: String,
         sender: tokio::sync::oneshot::Sender<bool>,
     ) -> bool {
-        if generation != self.chat_stream_generation {
+        if !self.run_accepts_tools(generation) {
             let _ = sender.send(false);
             return false;
         }
-        if let Some(stale_sender) = self.pending_tool_approvals.insert(tool_call_id, sender) {
+        if let Some(stale_sender) = self.pending_tool_approvals.insert((generation, tool_call_id), sender) {
             // A repeated protocol id supersedes the older waiter without
             // allowing two workers to consume one user decision.
             let _ = stale_sender.send(false);
@@ -3242,10 +3329,11 @@ impl AiWorkspaceEntity {
 
     pub(in crate::workspace) fn resolve_tool_approval(
         &mut self,
+        generation: u64,
         tool_call_id: &str,
         approved: bool,
     ) -> bool {
-        let Some(sender) = self.pending_tool_approvals.remove(tool_call_id) else {
+        let Some(sender) = self.pending_tool_approvals.remove(&(generation, tool_call_id.to_owned())) else {
             return false;
         };
         let _ = sender.send(approved);
@@ -3258,13 +3346,13 @@ impl AiWorkspaceEntity {
         tool_call_id: String,
         sender: tokio::sync::oneshot::Sender<Option<String>>,
     ) -> bool {
-        if generation != self.chat_stream_generation {
+        if !self.is_chat_stream_generation(generation) {
             let _ = sender.send(None);
             return false;
         }
         if let Some(stale_sender) = self
             .pending_acp_permission_choices
-            .insert(tool_call_id, sender)
+            .insert((generation, tool_call_id), sender)
         {
             let _ = stale_sender.send(None);
         }
@@ -3273,10 +3361,11 @@ impl AiWorkspaceEntity {
 
     pub(in crate::workspace) fn resolve_acp_permission_choice(
         &mut self,
+        generation: u64,
         tool_call_id: &str,
         option_id: Option<String>,
     ) -> bool {
-        let Some(sender) = self.pending_acp_permission_choices.remove(tool_call_id) else {
+        let Some(sender) = self.pending_acp_permission_choices.remove(&(generation, tool_call_id.to_owned())) else {
             return false;
         };
         let _ = sender.send(option_id);
@@ -3299,20 +3388,23 @@ impl AiWorkspaceEntity {
         candidate_count: usize,
         sender: tokio::sync::oneshot::Sender<Option<usize>>,
     ) -> bool {
-        if generation != self.chat_stream_generation || candidate_count == 0 {
+        if !self.run_accepts_tools(generation) || candidate_count == 0 {
             let _ = sender.send(None);
             return false;
         }
         if let Some(stale_sender) = self
             .pending_tool_candidate_selections
-            .insert(tool_call_id.clone(), sender)
+            .insert((generation, tool_call_id.clone()), sender)
         {
             // Repeated protocol IDs cancel the older selector before replacing it.
             let _ = stale_sender.send(None);
         }
+        self.pending_tool_candidate_counts.insert((generation, tool_call_id.clone()), candidate_count);
+        if !self.chat_stream_runs.get(&generation).is_some_and(|run| !run.child && Some(&run.conversation_id) == self.conversation_state.active_conversation_id.as_ref()) || self.chat_ui.tool_candidate_selection.is_some() { return true; }
         let input_was_focused = self.chat_ui.input_focused;
         let footer_focus = self.chat_ui.footer_focus;
         self.chat_ui.tool_candidate_selection = Some(AiToolCandidateSelectionState {
+            generation,
             tool_call_id,
             selected_index: 0,
             candidate_count,
@@ -3337,21 +3429,17 @@ impl AiWorkspaceEntity {
 
     pub(in crate::workspace) fn resolve_tool_candidate_selection(
         &mut self,
+        generation: u64,
         tool_call_id: &str,
         selected_index: Option<usize>,
     ) -> bool {
-        let Some(sender) = self.pending_tool_candidate_selections.remove(tool_call_id) else {
+        let Some(sender) = self.pending_tool_candidate_selections.remove(&(generation, tool_call_id.to_owned())) else {
             return false;
         };
-        let selected_index = selected_index.filter(|index| {
-            self.chat_ui
-                .tool_candidate_selection
-                .as_ref()
-                .is_some_and(|selection| {
-                    selection.tool_call_id == tool_call_id && *index < selection.candidate_count
-                })
-        });
-        if let Some(selection) = self.chat_ui.tool_candidate_selection.take() {
+        let count = self.pending_tool_candidate_counts.remove(&(generation, tool_call_id.to_owned())).unwrap_or(0);
+        let selected_index = selected_index.filter(|index| *index < count);
+        if self.chat_ui.tool_candidate_selection.as_ref().is_some_and(|selection| selection.generation == generation && selection.tool_call_id == tool_call_id) {
+            let selection = self.chat_ui.tool_candidate_selection.take().unwrap();
             // Candidate selection temporarily owns keyboard routing. Restore the
             // exact composer focus state instead of always focusing the input.
             self.chat_ui.input_focused = selection.input_was_focused;
@@ -3362,6 +3450,7 @@ impl AiWorkspaceEntity {
     }
 
     fn reject_all_tool_candidate_selections(&mut self) {
+        self.pending_tool_candidate_counts.clear();
         for (_, sender) in self.pending_tool_candidate_selections.drain() {
             let _ = sender.send(None);
         }
@@ -4132,8 +4221,11 @@ impl Drop for AiWorkspaceEntity {
         // Releasing the workspace is an explicit rejection boundary for every
         // protocol worker still waiting on a user decision.
         self.reject_all_tool_interactions();
-        if let Some(task) = self.chat_stream_task.take() {
-            task.abort();
+        for run in self.chat_stream_runs.values().filter(|run| !run.child) {
+            if let Some(agent) = &run.agent { let _ = self.agents.services.runtime.cancel_group(agent); }
+        }
+        for (_, run) in self.chat_stream_runs.drain() {
+            if let Some(task) = run.task { task.abort(); }
         }
         self.abort_terminal_inline_stream();
         // Runtime-backed reindex work is not a GPUI task, so entity release
@@ -4155,6 +4247,7 @@ pub(super) enum AiStandardConfirmKind {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct AiToolCandidateSelectionState {
+    pub(super) generation: u64,
     pub(super) tool_call_id: String,
     pub(super) selected_index: usize,
     pub(super) candidate_count: usize,
@@ -5033,7 +5126,7 @@ mod entity_tests {
         let chat_drop_count = Arc::new(AtomicUsize::new(0));
         let terminal_drop_count = Arc::new(AtomicUsize::new(0));
 
-        let chat_generation = entity.update(cx, |entity, _cx| entity.begin_chat_stream().0);
+        let chat_generation = entity.update(cx, |entity, _cx| entity.begin_chat_stream("conversation-a".into(), "assistant-a".into()).0);
         let first_chat_task = spawn_abort_counted_task(&runtime, Arc::clone(&chat_drop_count));
         entity.update(cx, |entity, _cx| {
             entity.set_chat_stream_task(chat_generation, first_chat_task)
@@ -5064,10 +5157,10 @@ mod entity_tests {
         wait_for_lifecycle_count(&terminal_drop_count, 1);
 
         entity.update(cx, |entity, _cx| {
-            entity.cancel_chat_stream();
+            entity.cancel_chat_stream_for("conversation-a");
             entity.close_terminal_inline_panel();
             // Repeated cancellation cannot abort an already-consumed handle.
-            entity.cancel_chat_stream();
+            entity.cancel_chat_stream_for("conversation-a");
             entity.close_terminal_inline_panel();
         });
         wait_for_lifecycle_count(&chat_drop_count, 2);
@@ -5083,7 +5176,7 @@ mod entity_tests {
         });
         let chat_drop_count = Arc::new(AtomicUsize::new(0));
         let terminal_drop_count = Arc::new(AtomicUsize::new(0));
-        let chat_generation = entity.update(cx, |entity, _cx| entity.begin_chat_stream().0);
+        let chat_generation = entity.update(cx, |entity, _cx| entity.begin_chat_stream("conversation-a".into(), "assistant-a".into()).0);
         let chat_task = spawn_abort_counted_task(&runtime, Arc::clone(&chat_drop_count));
         let terminal_task = spawn_abort_counted_task(&runtime, Arc::clone(&terminal_drop_count));
         entity.update(cx, |entity, _cx| {
@@ -5160,7 +5253,7 @@ mod entity_tests {
                 model_selector_surface: true,
                 settings_surface: false,
             });
-            let stream = entity.begin_chat_stream();
+            let stream = entity.begin_chat_stream("conversation-a".into(), "assistant-a".into());
             entity.set_workspace_visibility(AiWorkspaceVisibility::default());
             stream
         });
@@ -5196,7 +5289,7 @@ mod entity_tests {
         let entity = cx.new(|cx| {
             AiWorkspaceEntity::new(test_runtime(), oxideterm_ai::AiProviderKeyStore::new(), cx)
         });
-        let (generation, _) = entity.update(cx, |entity, _cx| entity.begin_chat_stream());
+        let (generation, _) = entity.update(cx, |entity, _cx| entity.begin_chat_stream("conversation-a".into(), "assistant-a".into()));
         let (first_sender, mut first_receiver) = tokio::sync::oneshot::channel();
         let (replacement_sender, mut replacement_receiver) = tokio::sync::oneshot::channel();
         entity.update(cx, |entity, _cx| {
@@ -5206,15 +5299,15 @@ mod entity_tests {
                 "tool-a".to_string(),
                 replacement_sender,
             ));
-            assert!(entity.resolve_tool_approval("tool-a", true));
-            assert!(!entity.resolve_tool_approval("tool-a", false));
+            assert!(entity.resolve_tool_approval(generation, "tool-a", true));
+            assert!(!entity.resolve_tool_approval(generation, "tool-a", false));
         });
         assert_eq!(first_receiver.try_recv(), Ok(false));
         assert_eq!(replacement_receiver.try_recv(), Ok(true));
 
         let (stale_sender, mut stale_receiver) = tokio::sync::oneshot::channel();
         entity.update(cx, |entity, _cx| {
-            entity.cancel_chat_stream();
+            entity.cancel_chat_stream_for("conversation-a");
             assert!(!entity.register_tool_approval(
                 generation,
                 "stale-tool".to_string(),
@@ -5225,7 +5318,7 @@ mod entity_tests {
 
         let (release_sender, mut release_receiver) = tokio::sync::oneshot::channel();
         let current_generation = entity.update(cx, |entity, _cx| {
-            let (current_generation, _) = entity.begin_chat_stream();
+            let (current_generation, _) = entity.begin_chat_stream("conversation-a".into(), "assistant-a".into());
             assert!(entity.register_tool_approval(
                 current_generation,
                 "release-tool".to_string(),
@@ -5243,13 +5336,39 @@ mod entity_tests {
     }
 
     #[gpui::test]
+    fn independent_conversations_route_reused_tool_ids_and_cancel_only_their_owner(cx: &mut TestAppContext) {
+        let entity = cx.new(|cx| AiWorkspaceEntity::new(test_runtime(), oxideterm_ai::AiProviderKeyStore::new(), cx));
+        let (first, second) = entity.update(cx, |ai, _cx| {
+            let first = ai.begin_chat_stream("first".into(), "reply-first".into()).0;
+            let second = ai.begin_chat_stream("second".into(), "reply-second".into()).0;
+            (first, second)
+        });
+        let (first_tx, mut first_rx) = tokio::sync::oneshot::channel();
+        let (second_tx, mut second_rx) = tokio::sync::oneshot::channel();
+        entity.update(cx, |ai, _cx| {
+            assert!(ai.register_tool_approval(first, "same-id".into(), first_tx));
+            assert!(ai.register_tool_approval(second, "same-id".into(), second_tx));
+            assert!(!ai.chat_stream_matches(first, "second", "reply-second"));
+            ai.cancel_chat_stream_for("first");
+            assert!(ai.chat_stream_matches(second, "second", "reply-second"));
+            assert!(!ai.resolve_tool_approval(first, "same-id", true));
+            assert!(ai.resolve_tool_approval(second, "same-id", true));
+        });
+        assert_eq!(first_rx.try_recv().unwrap(), false);
+        assert_eq!(second_rx.try_recv().unwrap(), true);
+    }
+
+    #[gpui::test]
     fn tool_candidate_selection_is_keyboard_ordered_and_cancelled_with_stream(
         cx: &mut TestAppContext,
     ) {
         let entity = cx.new(|cx| {
             AiWorkspaceEntity::new(test_runtime(), oxideterm_ai::AiProviderKeyStore::new(), cx)
         });
-        let (generation, _) = entity.update(cx, |entity, _cx| entity.begin_chat_stream());
+        let (generation, _) = entity.update(cx, |entity, _cx| {
+            entity.conversation_state.create_conversation("conversation-a".into(), None, 0, None);
+            entity.begin_chat_stream("conversation-a".into(), "assistant-a".into())
+        });
         let (sender, mut receiver) = tokio::sync::oneshot::channel();
         entity.update(cx, |entity, _cx| {
             entity.focus_chat_input();
@@ -5271,7 +5390,7 @@ mod entity_tests {
                 Some(2),
             );
             assert!(!entity.chat_ui().input_focused);
-            assert!(entity.resolve_tool_candidate_selection("tool-choice", Some(2)));
+            assert!(entity.resolve_tool_candidate_selection(generation, "tool-choice", Some(2)));
             assert!(entity.chat_ui().input_focused);
         });
         assert_eq!(receiver.try_recv(), Ok(Some(2)));
@@ -5285,7 +5404,7 @@ mod entity_tests {
                 2,
                 cancel_sender,
             ));
-            entity.cancel_chat_stream();
+            entity.cancel_chat_stream_for("conversation-a");
             assert!(entity.chat_ui().input_focused);
         });
         assert_eq!(cancel_receiver.try_recv(), Ok(None));
