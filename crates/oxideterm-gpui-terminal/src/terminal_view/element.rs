@@ -724,9 +724,10 @@ impl TerminalElement {
         mut cache: Option<&mut TerminalLayoutCache>,
     ) -> TerminalElementLayout {
         let mut backgrounds = Vec::new();
+        let logical_lines = self.logical_lines_for_rows(visible_rows.clone());
         #[cfg(feature = "bench")]
         let roles_started = Instant::now();
-        let semantic_roles = self.semantic_roles_for_rows(visible_rows.clone());
+        let semantic_roles = self.semantic_roles_for_lines(&logical_lines);
         #[cfg(feature = "bench")]
         if let Some(cache) = cache.as_deref_mut() {
             cache.performance.semantic_roles_micros = duration_micros(roles_started.elapsed());
@@ -735,7 +736,6 @@ impl TerminalElement {
                 .filter(|role| **role == SemanticLineRole::Command)
                 .count();
         }
-        let logical_lines = self.logical_lines_for_rows(visible_rows.clone());
         #[cfg(feature = "bench")]
         let highlights_started = Instant::now();
         let highlight_layout = if let Some(cache) = cache.as_deref_mut() {
@@ -1336,23 +1336,23 @@ impl TerminalElement {
         }
     }
 
-    fn semantic_roles_for_rows(
+    fn semantic_roles_for_lines(
         &self,
-        visible_rows: Range<usize>,
+        logical_lines: &TerminalLogicalLineIndex,
     ) -> HashMap<Range<usize>, SemanticLineRole> {
         if !self.semantic_coloring {
             return HashMap::new();
         }
         let mut roles = HashMap::new();
-        for row_index in visible_rows {
-            let Some(rows) = logical_line_range_for_row(&self.snapshot, row_index) else {
-                continue;
-            };
-            // Wrapped rows share one semantic role, so the command marks are scanned once per
-            // logical line and the result is reused by highlights and row layout keys.
-            roles.entry(rows.clone()).or_insert_with(|| {
-                semantic_line_role_for_rows(&self.snapshot, &self.command_marks, rows)
-            });
+        // Layout already resolved wrapped ranges; sharing them avoids rescanning
+        // the same logical line for each physical row in the viewport.
+        for line in &logical_lines.lines {
+            let role = semantic_line_role_for_rows(
+                &self.snapshot,
+                &self.command_marks,
+                line.range.clone(),
+            );
+            roles.insert(line.range.clone(), role);
         }
         roles
     }
